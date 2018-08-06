@@ -14,5 +14,5 @@
 # editors
 .idea
 
-somebigfile_*
+*.blob
 file.img

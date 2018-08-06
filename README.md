@@ -49,7 +49,7 @@ types de données:
   note: we separate by file type to make it easier to change backup approach on one of them afterwards
   * state: 
    ```
-   gs://eoscanada-playground-pitr/backups/state/blobs/{sha1sum.blob}
+   gs://eoscanada-playground-pitr/backups/state/blobs/{sha1sum}.blob
    gs://eoscanada-playground-pitr/backups/state/standard/1008385183/shared_memory.bin.yaml
    gs://eoscanada-playground-pitr/backups/state/standard/1008385183/shared_memory.meta.yaml
    gs://eoscanada-playground-pitr/backups/state/standard/1008385183/forkdb.dat.yaml
@@ -59,7 +59,7 @@ types de données:
    ```
   * blobs:
    ``` 
-   gs://eoscanada-playground-pitr/backups/blocks/blobs/{sha1sum.blob}
+   gs://eoscanada-playground-pitr/backups/blocks/blobs/{sha1sum}.blob
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/blocks.index.yaml
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/blocks.log.yaml
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.bin.yaml
@@ -70,10 +70,10 @@ types de données:
 ```yaml
 gs://eoscanada-playground-pitr/backups/state/1008385183/shared_memory.bin.yaml
 ---
-file: state/shared_memory.bin
+fileName: state/shared_memory.bin
 date: 2001-12-14t21:59:43.10-05:00
-blobs_location: /backups/state/blobs
-total_size: 150M
+blobsLocation: /backups/state/blobs
+totalSize: 150M
 chunks:
 - start: 0
   end: 50M

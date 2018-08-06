@@ -4,10 +4,28 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
-	"strconv"
+	"time"
+
+	yaml "gopkg.in/yaml.v2"
 )
+
+type Chunkmeta struct {
+	Start   uint64
+	End     uint64
+	Content string
+	IsEmpty bool
+}
+
+type Filemeta struct {
+	FileName      string
+	BlobsLocation string
+	Date          time.Time
+	TotalSize     int64
+	Chunks        []Chunkmeta
+}
 
 func main() {
 
@@ -20,11 +38,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	var fm Filemeta
+	fm.FileName = fileToBeChunked
+
 	defer file.Close()
 
 	fileInfo, _ := file.Stat()
 
 	var fileSize int64 = fileInfo.Size()
+	fm.TotalSize = fileSize
+	fm.BlobsLocation = "/here"
 
 	const fileChunk = 50 * (1 << 20) // 50 MB, change this to your requirement
 	emptyBytes := make([]byte, fileChunk)
@@ -38,29 +61,38 @@ func main() {
 
 	for i := uint64(0); i < totalPartsNum; i++ {
 
-		partSize := int(math.Min(fileChunk, float64(fileSize-int64(i*fileChunk))))
+		partSize := uint64(math.Min(fileChunk, float64(fileSize-int64(i*fileChunk))))
+		var cm Chunkmeta
+		cm.Start = (i * fileChunk)
+		cm.End = cm.Start + partSize - 1
 		partBuffer := make([]byte, partSize)
 
 		file.Read(partBuffer)
 
 		// write to disk
-		fileName := "somebigfile_" + strconv.FormatUint(i, 10)
-		_, err := os.Create(fileName)
-
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// write/save buffer to disk
-		ioutil.WriteFile(fileName, partBuffer, os.ModeAppend)
 		partSHA1Sum := sha1.Sum(partBuffer)
+		// write/save buffer to disk
 		if partSHA1Sum == holeSHA1Sum {
-			fmt.Println("This is a hole in sparsefile")
+			cm.Content = fmt.Sprintf("%x", partSHA1Sum)
+			cm.IsEmpty = true
 		} else {
-			fmt.Printf("Got some sum: %x\n", partSHA1Sum)
+			fileName := fmt.Sprintf("%x", partSHA1Sum) + ".blob"
+
+			_, err := os.Create(fileName)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			ioutil.WriteFile(fileName, partBuffer, os.ModeAppend)
+			cm.Content = fmt.Sprintf("%x", partSHA1Sum)
+			fmt.Printf("Wrote file: %s\n", fileName)
 		}
 
-		fmt.Println("Split to : ", fileName)
+		fm.Chunks = append(fm.Chunks, cm)
 	}
+	d, err := yaml.Marshal(&fm)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	fmt.Printf("file meta is: \n---\n%s\n", string(d))
 }
