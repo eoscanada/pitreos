@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"cloud.google.com/go/storage"
+	"github.com/abourget/llerrgroup"
 	"golang.org/x/net/context"
 
 	yaml "gopkg.in/yaml.v2"
@@ -20,6 +21,7 @@ import (
 
 var (
 	StorageBucketName = "eoscanada-playground-pitr"
+	fileChunk         = uint64(50 * (1 << 20))
 	StorageBucket     *storage.BucketHandle
 )
 
@@ -140,17 +142,16 @@ func main() {
 	fm.TotalSize = fileSize
 	fm.BlobsLocation = "/here"
 
-	const fileChunk = 10 * (1 << 20) // 10 MB, change this to your requirement
-
 	// calculate total number of parts the file will be chunked into
 
 	totalPartsNum := uint64(math.Ceil(float64(fileSize) / float64(fileChunk)))
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
+	eg := llerrgroup.New(25)
 	for i := uint64(0); i < totalPartsNum; i++ {
 
-		partSize := uint64(math.Min(fileChunk, float64(fileSize-int64(i*fileChunk))))
+		partSize := uint64(math.Min(float64(fileChunk), float64(fileSize-int64(i*fileChunk))))
 		var cm Chunkmeta
 		cm.Start = (i * fileChunk)
 		cm.End = cm.Start + partSize - 1
@@ -167,25 +168,35 @@ func main() {
 			if checkFileExistsOnGoogleStorage(fileName) {
 				log.Printf("File already exists: %s\n", fileName)
 			} else {
-				url, err := writeToGoogleStorage(fileName, partBuffer)
+				if eg.Stop() {
+					continue // short-circuit the loop if we got an error
+				}
+				eg.Go(func() error {
+					url, err := writeToGoogleStorage(fileName, partBuffer)
+					fmt.Printf("Wrote file: %s\n", url)
+					return err
+				})
 				if err != nil {
 					fmt.Printf("something went wrong, %s", err)
 					os.Exit(1)
 				}
-				fmt.Printf("Wrote file: %s\n", url)
 			}
 
-			newData, err := readFromGoogleStorage(fileName)
-			if err != nil {
-				fmt.Printf("something went wrong reading")
-				os.Exit(1)
-			}
-			newSHA1Sum := sha1.Sum(newData)
-			fmt.Printf("THIS IS THE NEW SUM %x\n", newSHA1Sum)
+			//newData, err := readFromGoogleStorage(fileName)
+			//if err != nil {
+			//	fmt.Printf("something went wrong reading")
+			//	os.Exit(1)
+			//}
+			//newSHA1Sum := sha1.Sum(newData)
+			//fmt.Printf("THIS IS THE NEW SUM %x\n", newSHA1Sum)
 
 		}
 
 		fm.Chunks = append(fm.Chunks, cm)
+	}
+	if err := eg.Wait(); err != nil {
+		// eg.Wait() will block until everything is done, and return the first error.
+		os.Exit(1)
 	}
 	d, err := yaml.Marshal(&fm)
 	if err != nil {
