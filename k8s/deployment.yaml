@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pitreos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pitreos
+  template:
+    metadata:
+      name: pitreos
+      labels:
+        app: pitreos
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: pitreos
+        image: gcr.io/eoscanada-shared-services/pitreos:latest
+        imagePullPolicy: Always
+        command:
+                #        - /bin/bash
+          #        args:
+        command:
+        - /bin/sleep
+        args:
+        - "3600"
+
+        # /app/bp-getinfo -api-addr=http://mainnet.eoscanada.com -project-id=eoscanada-public

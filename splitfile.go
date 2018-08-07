@@ -1,41 +1,132 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/sha1"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
 	"os"
-	"time"
+
+	"cloud.google.com/go/storage"
+	"golang.org/x/net/context"
 
 	yaml "gopkg.in/yaml.v2"
 )
 
-type Chunkmeta struct {
-	Start   uint64
-	End     uint64
-	Content string
-	IsEmpty bool
+var (
+	StorageBucketName = "eoscanada-playground-pitr"
+	StorageBucket     *storage.BucketHandle
+)
+
+func isEmptyChunk(s []byte) bool {
+	for _, v := range s {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
 }
 
-type Filemeta struct {
-	FileName      string
-	BlobsLocation string
-	Date          time.Time
-	TotalSize     int64
-	Chunks        []Chunkmeta
+func configureStorage(bucketID string) (*storage.BucketHandle, error) {
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.Bucket(bucketID), nil
+}
+
+func writeToGoogleStorage(filename string, data []byte) (string, error) {
+	if StorageBucket == nil {
+		return "", errors.New("storage bucket is missing")
+	}
+
+	ctx := context.Background()
+	w := StorageBucket.Object(filename).NewWriter(ctx)
+	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
+	w.ContentType = "application/octet-stream"
+
+	// Entries are immutable, be aggressive about caching (1 day).
+	w.CacheControl = "public, max-age=86400"
+
+	w.ContentEncoding = "gzip"
+	gw := gzip.NewWriter(w)
+
+	//f, err := os.Open("README.md")
+	//if err != nil {
+	//	return "", err
+	//}
+	f := bytes.NewReader(data)
+
+	if _, err := io.Copy(gw, f); err != nil {
+		return "", err
+	}
+	if err := gw.Close(); err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+
+	const publicURL = "https://storage.googleapis.com/%s/%s"
+	return fmt.Sprintf(publicURL, StorageBucketName, filename), nil
+
+}
+
+func readFromGoogleStorage(filename string) (data []byte, err error) {
+	if StorageBucket == nil {
+		return nil, errors.New("storage bucket is missing")
+	}
+
+	ctx := context.Background()
+
+	r, err := StorageBucket.Object(filename).NewReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err = ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+
+}
+
+func checkFileExistsOnGoogleStorage(fileName string) bool {
+	ctx := context.Background()
+	o := StorageBucket.Object(fileName)
+	attrs, err := o.Attrs(ctx)
+	if err != nil {
+		return false
+	}
+	if attrs.Name != fileName {
+		return false
+	}
+
+	return true
+
 }
 
 func main() {
+
+	var err error
+	StorageBucket, err = configureStorage(StorageBucketName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fileToBeChunked := "file.img"
 
 	file, err := os.Open(fileToBeChunked)
 
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	var fm Filemeta
@@ -49,15 +140,13 @@ func main() {
 	fm.TotalSize = fileSize
 	fm.BlobsLocation = "/here"
 
-	const fileChunk = 50 * (1 << 20) // 50 MB, change this to your requirement
-	emptyBytes := make([]byte, fileChunk)
-	holeSHA1Sum := sha1.Sum(emptyBytes)
+	const fileChunk = 10 * (1 << 20) // 10 MB, change this to your requirement
 
 	// calculate total number of parts the file will be chunked into
 
 	totalPartsNum := uint64(math.Ceil(float64(fileSize) / float64(fileChunk)))
 
-	fmt.Printf("Splitting to %d pieces.\n", totalPartsNum)
+	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
 	for i := uint64(0); i < totalPartsNum; i++ {
 
@@ -69,23 +158,31 @@ func main() {
 
 		file.Read(partBuffer)
 
-		// write to disk
-		partSHA1Sum := sha1.Sum(partBuffer)
-		// write/save buffer to disk
-		if partSHA1Sum == holeSHA1Sum {
-			cm.Content = fmt.Sprintf("%x", partSHA1Sum)
+		if isEmptyChunk(partBuffer) {
 			cm.IsEmpty = true
 		} else {
-			fileName := fmt.Sprintf("%x", partSHA1Sum) + ".blob"
+			cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
+			fileName := cm.Content + ".blob"
 
-			_, err := os.Create(fileName)
+			if checkFileExistsOnGoogleStorage(fileName) {
+				log.Printf("File already exists: %s\n", fileName)
+			} else {
+				url, err := writeToGoogleStorage(fileName, partBuffer)
+				if err != nil {
+					fmt.Printf("something went wrong, %s", err)
+					os.Exit(1)
+				}
+				fmt.Printf("Wrote file: %s\n", url)
+			}
+
+			newData, err := readFromGoogleStorage(fileName)
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("something went wrong reading")
 				os.Exit(1)
 			}
-			ioutil.WriteFile(fileName, partBuffer, os.ModeAppend)
-			cm.Content = fmt.Sprintf("%x", partSHA1Sum)
-			fmt.Printf("Wrote file: %s\n", fileName)
+			newSHA1Sum := sha1.Sum(newData)
+			fmt.Printf("THIS IS THE NEW SUM %x\n", newSHA1Sum)
+
 		}
 
 		fm.Chunks = append(fm.Chunks, cm)
