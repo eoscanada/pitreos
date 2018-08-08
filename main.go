@@ -6,11 +6,13 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"net/http"
 	"os"
-	"sync"
 
 	"cloud.google.com/go/storage"
 	"github.com/abourget/llerrgroup"
+
+	_ "net/http/pprof"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -19,23 +21,12 @@ var (
 	StorageBucketName = "eoscanada-playground-pitr"
 	ChunkSize         = uint64(250 * (1 << 20))
 	StorageBucket     *storage.BucketHandle
-	mutex             = &sync.Mutex{}
 )
 
-func isEmptyChunk(s []byte) bool {
-	for _, v := range s {
-		if v != 0 {
-			return false
-		}
-	}
-	return true
-}
-
 func downloadFileFromChunks(fm Filemeta) {
-	fmt.Printf("%+v\n", fm)
+	log.Printf("Restoring file %s with size %d from snapshot dated %s\n", fm.FileName, fm.TotalSize, fm.Date)
 
-	f, err := os.OpenFile(fm.FileName, os.O_RDWR, 0644)
-
+	f, err := os.OpenFile(fm.FileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err = f.Truncate(fm.TotalSize); err != nil {
 		log.Fatal(err)
 	}
@@ -44,82 +35,82 @@ func downloadFileFromChunks(fm Filemeta) {
 		log.Fatal(err)
 	}
 
-	eg := llerrgroup.New(60)
-	for _, i := range fm.Chunks {
-		mutex.Lock()
-		f.Seek(int64(i.Start), 0)
-		partBuffer := make([]byte, int64(i.End-i.Start+1))
-		n, err := f.Read(partBuffer)
-		mutex.Unlock()
-		if err != nil {
-			log.Fatalf("error wtf: %s\n", err)
-		}
-		fmt.Printf("read that many bytes: %i\n", n)
+	eg := llerrgroup.New(10)
+	for n, i := range fm.Chunks {
 
-		if isEmptyChunk(partBuffer) {
-			fmt.Printf("block starting at %i is empty", i.Start)
+		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, i.Start, i.End-i.Start+1)
+
+		if blockIsEmpty {
+			fmt.Printf("block #%d is empty: ", n)
 			if i.IsEmpty {
-				fmt.Println(".... Perfect, we are happy")
-			} else {
-				fmt.Printf("uh oh... it should be sha1sum of %s\n", i.Content)
-				blobPath := fmt.Sprintf("%s.blob", i.Content)
-				blobStart := int64(i.Start)
-				eg.Go(func() error {
-					newData, err := readFromGoogleStorage(blobPath)
-					if err != nil {
-						fmt.Printf("something went wrong reading, error = %s\n", err)
-						return err
-					}
-					newSHA1Sum := sha1.Sum(newData)
-					fmt.Printf("THIS IS THE NEW SUM %x\n", newSHA1Sum)
-					mutex.Lock()
-					f.Seek(blobStart, 0)
-					f.Write(newData)
-					mutex.Unlock()
-					return nil
-				})
+				fmt.Println("...Excellent")
+				continue
 			}
 		} else {
 			readSHA1Sum := sha1.Sum(partBuffer)
 			shasum := fmt.Sprintf("%x", readSHA1Sum)
-			fmt.Printf("we have this sha1: %s...", shasum)
+			fmt.Printf("block #%d has this sha1: %s...", n, shasum)
 			if shasum == i.Content {
-				fmt.Println("we are so happy !!!! ")
-			} else {
-				fmt.Printf("uh oh .... we are expecting: %s\n", i.Content)
+				fmt.Println("...Excellent")
+				continue
 			}
 		}
 
+		if i.IsEmpty {
+			fmt.Println("...Punching a hole through")
+			err := WipeChunk(f, i.Start, i.End-i.Start+1)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			continue
+		}
+
+		fmt.Printf("...instead of sha1sum %s. Downloading...\n", i.Content)
+		blobPath := fmt.Sprintf("%s.blob", i.Content)
+		blobStart := int64(i.Start)
+		thischunk := n
+		expectedSum := i.Content
+		if eg.Stop() {
+			fmt.Println("got stop signal")
+			continue
+		}
+		eg.Go(func() error {
+			newData, err := readFromGoogleStorage(blobPath)
+			if err != nil {
+				fmt.Printf("something went wrong reading, error = %s\n", err)
+				return err
+			}
+			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
+			fmt.Printf("Got chunk #%d with new sum: %s\n", thischunk, newSHA1Sum)
+			if expectedSum != newSHA1Sum {
+				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
+			}
+			mutex.Lock()
+			f.Seek(blobStart, 0)
+			f.Write(newData)
+			mutex.Unlock()
+			return nil
+		})
+
 	}
 	if err := eg.Wait(); err != nil {
-		// eg.Wait() will block until everything is done, and return the first error.
-		os.Exit(1)
+		log.Fatalln(err)
 	}
 }
 
 func uploadFileToChunks(fileName string, chunkSize uint64) {
 
-	file, err := os.Open(fileName)
-
+	f, err := os.Open(fileName)
+	defer f.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var fm Filemeta
-	fm.FileName = fileName
-
-	defer file.Close()
-
-	fileInfo, _ := file.Stat()
-
-	var fileSize int64 = fileInfo.Size()
-	fmt.Printf("filesize is %s\n", fileSize)
-	fm.TotalSize = fileSize
-	fm.BlobsLocation = "/here"
+	fileInfo, _ := f.Stat()
+	fm := Filemeta{FileName: fileName, TotalSize: fileInfo.Size(), BlobsLocation: ""}
 
 	// calculate total number of parts the file will be chunked into
-
-	totalPartsNum := uint64(math.Ceil(float64(fileSize) / float64(chunkSize)))
+	totalPartsNum := uint64(math.Ceil(float64(fm.TotalSize) / float64(chunkSize)))
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
@@ -127,47 +118,37 @@ func uploadFileToChunks(fileName string, chunkSize uint64) {
 	for i := uint64(0); i < totalPartsNum; i++ {
 
 		fmt.Printf("### Processing part %d of %d ###\n", i, totalPartsNum)
-		partSize := uint64(math.Min(float64(ChunkSize), float64(fileSize-int64(i*ChunkSize))))
+		partSize := uint64(math.Min(float64(ChunkSize), float64(fm.TotalSize-int64(i*ChunkSize))))
 		var cm Chunkmeta
 		cm.Start = (i * ChunkSize)
 		cm.End = cm.Start + partSize - 1
-		partBuffer := make([]byte, partSize)
 
-		fmt.Println("reading file...")
-		file.Read(partBuffer)
-		fmt.Println("done reading file")
+		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, cm.Start, partSize)
+		cm.IsEmpty = blockIsEmpty
 
-		if isEmptyChunk(partBuffer) {
-			fmt.Println("this part is empty")
-			cm.IsEmpty = true
-		} else {
+		if !blockIsEmpty {
 			cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
 			fileName := cm.Content + ".blob"
 
 			if eg.Stop() {
 				continue // short-circuit the loop if we got an error
 			}
-			fmt.Println("will try to check a file in a go func")
 			eg.Go(func() error {
 				if checkFileExistsOnGoogleStorage(fileName) {
 					log.Printf("File already exists: %s\n", fileName)
 					return nil
 				} else {
-					log.Printf("Updating the file: %s\n", fileName)
 					url, err := writeToGoogleStorage(fileName, partBuffer)
 					fmt.Printf("Wrote file: %s\n", url)
 					return err
 				}
-
 			})
-
 		}
 
 		fm.Chunks = append(fm.Chunks, cm)
 	}
 	if err := eg.Wait(); err != nil {
-		// eg.Wait() will block until everything is done, and return the first error.
-		os.Exit(1)
+		log.Fatalln(err)
 	}
 	d, err := yaml.Marshal(&fm)
 	if err != nil {
@@ -178,6 +159,10 @@ func uploadFileToChunks(fileName string, chunkSize uint64) {
 }
 
 func main() {
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil)) // Serve profiler endpoint
+	}()
 
 	// parse args
 	command := "backup"

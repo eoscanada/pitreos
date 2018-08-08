@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"time"
+
+	fibmap "github.com/frostschutz/go-fibmap"
+)
 
 type Chunkmeta struct {
 	Start   uint64
@@ -15,4 +19,9 @@ type Filemeta struct {
 	Date          time.Time
 	TotalSize     int64
 	Chunks        []Chunkmeta
+}
+
+type ExtendedFile struct {
+	SparseSupported bool
+	Extents         []fibmap.Extent
 }

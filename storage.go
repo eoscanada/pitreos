@@ -28,7 +28,8 @@ func writeToGoogleStorage(filename string, data []byte) (string, error) {
 	ctx := context.Background()
 	w := StorageBucket.Object(filename).NewWriter(ctx)
 	fmt.Printf("The size is: %s", w.ChunkSize)
-	w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
+	// would make readable publicly
+	//w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
 	w.ContentType = "application/octet-stream"
 	w.CacheControl = "public, max-age=86400"
 
@@ -52,6 +53,7 @@ func writeToGoogleStorage(filename string, data []byte) (string, error) {
 }
 
 func readFromGoogleStorage(filename string) (data []byte, err error) {
+
 	if StorageBucket == nil {
 		return nil, errors.New("storage bucket is missing")
 	}
@@ -62,13 +64,9 @@ func readFromGoogleStorage(filename string) (data []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
-	data, err = ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-
+	return ioutil.ReadAll(r)
 }
 
 func checkFileExistsOnGoogleStorage(fileName string) bool {
