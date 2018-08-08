@@ -15,5 +15,6 @@
 .idea
 
 *.blob
-file.img
+*.img
+*.yaml
 pitreos
