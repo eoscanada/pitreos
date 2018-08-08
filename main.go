@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
-	"net/http"
 	"os"
 
 	"cloud.google.com/go/storage"
@@ -17,7 +16,7 @@ import (
 
 var (
 	StorageBucketName = "eoscanada-playground-pitr"
-	ChunkSize         = uint64(250 * (1 << 20))
+	ChunkSize         = int64(250 * 1024 * 1024)
 	StorageBucket     *storage.BucketHandle
 )
 
@@ -36,7 +35,7 @@ func downloadFileFromChunks(fm Filemeta) {
 	eg := llerrgroup.New(10)
 	for n, i := range fm.Chunks {
 
-		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, i.Start, i.End-i.Start+1)
+		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, int64(i.Start), int64(i.End-i.Start+1))
 
 		if blockIsEmpty {
 			fmt.Printf("block #%d is empty: ", n)
@@ -56,7 +55,7 @@ func downloadFileFromChunks(fm Filemeta) {
 
 		if i.IsEmpty {
 			fmt.Println("...Punching a hole through")
-			err := WipeChunk(f, i.Start, i.End-i.Start+1)
+			err := wipeChunk(f, i.Start, i.End-i.Start+1)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -65,7 +64,7 @@ func downloadFileFromChunks(fm Filemeta) {
 
 		fmt.Printf("...instead of sha1sum %s. Downloading...\n", i.Content)
 		blobPath := fmt.Sprintf("%s.blob", i.Content)
-		blobStart := int64(i.Start)
+		blobStart := i.Start
 		thischunk := n
 		expectedSum := i.Content
 		if eg.Stop() {
@@ -83,11 +82,7 @@ func downloadFileFromChunks(fm Filemeta) {
 			if expectedSum != newSHA1Sum {
 				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
 			}
-			mutex.Lock()
-			f.Seek(blobStart, 0)
-			f.Write(newData)
-			mutex.Unlock()
-			return nil
+			return writeChunkToFile(f, int64(blobStart), newData)
 		})
 
 	}
@@ -96,7 +91,7 @@ func downloadFileFromChunks(fm Filemeta) {
 	}
 }
 
-func uploadFileToChunks(fileName string, chunkSize uint64) {
+func uploadFileToChunks(fileName string, chunkSize int64) {
 
 	f, err := os.Open(fileName)
 	defer f.Close()
@@ -105,28 +100,32 @@ func uploadFileToChunks(fileName string, chunkSize uint64) {
 	}
 
 	fileInfo, _ := f.Stat()
-	fm := Filemeta{FileName: fileName, TotalSize: fileInfo.Size(), BlobsLocation: ""}
+	fm := Filemeta{
+		FileName:      fileName,
+		TotalSize:     fileInfo.Size(),
+		BlobsLocation: "",
+	}
 
 	// calculate total number of parts the file will be chunked into
-	totalPartsNum := uint64(math.Ceil(float64(fm.TotalSize) / float64(chunkSize)))
+	totalPartsNum := int64(math.Ceil(float64(fm.TotalSize) / float64(chunkSize)))
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
 	eg := llerrgroup.New(60)
-	for i := uint64(0); i < totalPartsNum; i++ {
+	for i := int64(0); i < totalPartsNum; i++ {
 
 		fmt.Printf("### Processing part %d of %d ###\n", i, totalPartsNum)
-		partSize := uint64(math.Min(float64(ChunkSize), float64(fm.TotalSize-int64(i*ChunkSize))))
+		partSize := int64(math.Min(float64(ChunkSize), float64(fm.TotalSize-int64(i*ChunkSize))))
 		var cm Chunkmeta
 		cm.Start = (i * ChunkSize)
 		cm.End = cm.Start + partSize - 1
 
-		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, cm.Start, partSize)
+		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, int64(cm.Start), int64(partSize))
 		cm.IsEmpty = blockIsEmpty
 
 		if !blockIsEmpty {
 			cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
-			fileName := cm.Content + ".blob"
+			fileName := "stepd/" + cm.Content + ".blob"
 
 			if eg.Stop() {
 				continue // short-circuit the loop if we got an error
@@ -174,27 +173,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(command)
-	// backup file
-	if command == "backup" {
+	switch command {
+	case "backup":
 		uploadFileToChunks(fileName, ChunkSize)
-		os.Exit(0)
-	}
 
-	if command == "restore" {
-		var fm Filemeta
-
+	case "restore":
 		y, err := ioutil.ReadFile(fileName)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		err = yaml.Unmarshal(y, &fm)
-		if err != nil {
+		var fm Filemeta
+		if err = yaml.Unmarshal(y, &fm); err != nil {
 			log.Fatalf("error: %v", err)
 		}
+
 		downloadFileFromChunks(fm)
-		os.Exit(0)
+	default:
+		log.Fatalln("Unknown command", command)
 	}
 
 }

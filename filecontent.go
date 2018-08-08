@@ -23,21 +23,29 @@ func getSparseFileExtents(f *os.File) ([]fibmap.Extent, error) {
 	return x, nil
 }
 
-func WipeChunk(f *os.File, offset uint64, length uint64) error {
+func wipeChunk(f *os.File, offset int64, length int64) error {
 	ff := fibmap.NewFibmapFile(f)
-	return ff.PunchHole(int64(offset), int64(length))
+	return ff.PunchHole(offset, length)
 }
 
-func rangeIsInSparseFileExtent(start uint64, end uint64, extents []fibmap.Extent) bool {
+func rangeIsInSparseFileExtent(start int64, end int64, extents []fibmap.Extent) bool {
 	for _, ex := range extents {
-		if start <= ex.Logical+ex.Length && ex.Logical <= end {
+		if uint64(start) <= ex.Logical+ex.Length && ex.Logical <= uint64(end) {
 			return true
 		}
 	}
 	return false
 }
 
-func getChunkContentUnlessEmpty(file *os.File, offset uint64, size uint64) (data []byte, empty bool) {
+func writeChunkToFile(f *os.File, offset int64, s []byte) error {
+	mutex.Lock()
+	f.Seek(offset, 0)
+	_, err := f.Write(s)
+	mutex.Unlock()
+	return err
+}
+
+func getChunkContentUnlessEmpty(file *os.File, offset int64, size int64) (data []byte, empty bool) {
 	_, ok := knownFiles[file]
 	if !ok {
 		exts, err := getSparseFileExtents(file)
@@ -54,7 +62,7 @@ func getChunkContentUnlessEmpty(file *os.File, offset uint64, size uint64) (data
 	} else {
 		data = make([]byte, size)
 		mutex.Lock()
-		file.Seek(int64(offset), 0)
+		file.Seek(offset, 0)
 		_, err := file.Read(data)
 		mutex.Unlock()
 		if err != nil {

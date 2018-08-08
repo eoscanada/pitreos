@@ -7,8 +7,8 @@ import (
 )
 
 type Chunkmeta struct {
-	Start   uint64
-	End     uint64
+	Start   int64
+	End     int64
 	Content string
 	IsEmpty bool
 }

@@ -27,7 +27,6 @@ func writeToGoogleStorage(filename string, data []byte) (string, error) {
 
 	ctx := context.Background()
 	w := StorageBucket.Object(filename).NewWriter(ctx)
-	fmt.Printf("The size is: %s", w.ChunkSize)
 	// would make readable publicly
 	//w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
 	w.ContentType = "application/octet-stream"
