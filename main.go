@@ -12,8 +12,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/abourget/llerrgroup"
 
-	_ "net/http/pprof"
-
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -160,11 +158,6 @@ func uploadFileToChunks(fileName string, chunkSize uint64) {
 
 func main() {
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil)) // Serve profiler endpoint
-	}()
-
-	// parse args
 	command := "backup"
 	fileName := "file.img"
 	if len(os.Args) > 2 {

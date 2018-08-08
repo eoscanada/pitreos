@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -44,7 +43,7 @@ func getChunkContentUnlessEmpty(file *os.File, offset uint64, size uint64) (data
 		exts, err := getSparseFileExtents(file)
 		sparseSupported := true
 		if err != nil {
-			fmt.Println("cannot optimize based on sparse file readout")
+			log.Printf("cannot optimize based on sparse file readout")
 			sparseSupported = false
 		}
 		knownFiles[file] = ExtendedFile{SparseSupported: sparseSupported, Extents: exts}
