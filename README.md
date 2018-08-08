@@ -65,6 +65,18 @@ types de données:
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.bin.yaml
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.meta.yaml
    ```
+  * conditions:
+     {dest-prefix}: `backups`
+     {data-type}: `state` or `blocks`
+     {filename}: `reversible/shared_memory.bin` or `blocks.log`
+     {backup-type}: `standard` ou `history`? ...
+     {bucket-name}: `eoscanada-playground-pitr`
+     {timestamp}: `12345667778`
+
+    blob goes to:
+    `gs://{bucket-name}/{dest-prefix}/{data-type}/blobs/{sha1sum}.blob`
+    yaml metadata goes to
+    `gs://{bucket-name}/{dest-prefix}/{data-type}/{backup-type}/{timestamp}/{filename}.yaml`
    
 ## Example YAML file
 ```yaml
