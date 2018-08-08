@@ -125,7 +125,7 @@ func uploadFileToChunks(fileName string, chunkSize int64) {
 
 		if !blockIsEmpty {
 			cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
-			fileName := "stepd/" + cm.Content + ".blob"
+			fileName := cm.Content + ".blob"
 
 			if eg.Stop() {
 				continue // short-circuit the loop if we got an error
