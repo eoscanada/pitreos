@@ -67,25 +67,53 @@ types de données:
    ```
   * conditions:
      {dest-prefix}: `backups`
-     {data-type}: `state` or `blocks`
-     {filename}: `reversible/shared_memory.bin` or `blocks.log`
-     {backup-type}: `standard` ou `history`? ...
+     {data-type}: `state` or `blocks` # calculated for each defined folder
+     {filename}: `reversible/shared_memory.bin` or `blocks.log` # calculated from "os.Walk"
+     {backup-type}: `standard` ou `history`? ... # comes from "state-backup-type" and "blocks-backup-type"
      {bucket-name}: `eoscanada-playground-pitr`
-     {timestamp}: `12345667778`
+     {timestamp}: `12345667778` # calculated from time.Now().Unix()
 
     blob goes to:
     `gs://{bucket-name}/{dest-prefix}/{data-type}/blobs/{sha1sum}.blob`
     yaml metadata goes to
     `gs://{bucket-name}/{dest-prefix}/{data-type}/{backup-type}/{timestamp}/{filename}.yaml`
+
+    #example with all default values !
+    ./pitreos backup --dest-prefix=backups --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard
+    ./pitreos restore --source-prefix=backups  --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard --timestamp=1008385183
+
+    #note: we could have a "recent.yaml" file to which we append the "recent" ( 3months ???) successful backups which we can serve for different backup-types
+    - timestamp: 1235477665
+      blocks_backup_types:
+      - name: standard
+      state_backup_types:
+      - name: standard
+      - name: history
+      metadata_files: 
+      - gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/blocks.index.yaml
+      - gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/blocks.log.yaml
+      - gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.bin.yaml
+      - gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.meta.yaml
+      - gs://eoscanada-playground-pitr/backups/state/standard/1008385183/shared_memory.bin.yaml
+      - gs://eoscanada-playground-pitr/backups/state/standard/1008385183/shared_memory.meta.yaml
+      - gs://eoscanada-playground-pitr/backups/state/standard/1008385183/forkdb.dat.yaml
+      - gs://eoscanada-playground-pitr/backups/state/history/1008385183/shared_memory.bin.yaml
+      - gs://eoscanada-playground-pitr/backups/state/history/1008385183/shared_memory.meta.yaml
+      - gs://eoscanada-playground-pitr/backups/state/history/1008385183/forkdb.dat.yaml
+
+
+      
    
 ## Example YAML file
 ```yaml
 gs://eoscanada-playground-pitr/backups/state/1008385183/shared_memory.bin.yaml
 ---
-fileName: state/shared_memory.bin
+metaversion: 1                       # check this before going forward
+fileName: state/shared_memory.bin    # restore to that point
 date: 2001-12-14t21:59:43.10-05:00
-blobsLocation: /backups/state/blobs
+blobsLocation: backups/state/blobs
 totalSize: 150M
+totalChunks
 chunks:
 - start: 0
   end: 50M
