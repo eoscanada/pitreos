@@ -111,7 +111,7 @@ func uploadFileToChunks(fileName string, chunkSize int64) {
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
-	eg := llerrgroup.New(60)
+	eg := llerrgroup.New(10)
 	for i := int64(0); i < totalPartsNum; i++ {
 
 		fmt.Printf("### Processing part %d of %d ###\n", i, totalPartsNum)
