@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha1"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -15,7 +16,7 @@ import (
 
 var (
 	StorageBucketName = "eoscanada-playground-pitr"
-	ChunkSize         = uint64(50 * (1 << 20))
+	ChunkSize         = uint64(250 * (1 << 20))
 	StorageBucket     *storage.BucketHandle
 )
 
@@ -26,6 +27,59 @@ func isEmptyChunk(s []byte) bool {
 		}
 	}
 	return true
+}
+
+func downloadFileFromChunks(fm Filemeta) {
+	fmt.Printf("%+v\n", fm)
+
+	f, err := os.OpenFile(fm.FileName, os.O_RDWR, 0644)
+
+	if err = f.Truncate(fm.TotalSize); err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, i := range fm.Chunks {
+		f.Seek(int64(i.Start), 0)
+		partBuffer := make([]byte, int64(i.End-i.Start+1))
+		n, err := f.Read(partBuffer)
+		if err != nil {
+			log.Fatalf("error wtf: %s\n", err)
+		}
+		fmt.Printf("read that many bytes: %i\n", n)
+
+		if isEmptyChunk(partBuffer) {
+			fmt.Printf("block starting at %i is empty", i.Start)
+			if i.IsEmpty {
+				fmt.Println(".... Perfect, we are happy")
+			} else {
+				fmt.Printf("uh oh... it should be sha1sum of %s\n", i.Content)
+				newData, err := readFromGoogleStorage(fmt.Sprintf("%s.blob", i.Content))
+				if err != nil {
+					fmt.Printf("something went wrong reading, error = %s\n", err)
+					os.Exit(1)
+				}
+				newSHA1Sum := sha1.Sum(newData)
+				fmt.Printf("THIS IS THE NEW SUM %x\n", newSHA1Sum)
+				f.Seek(int64(i.Start), 0)
+				f.Write(newData)
+			}
+
+		} else {
+			readSHA1Sum := sha1.Sum(partBuffer)
+			shasum := fmt.Sprintf("%x", readSHA1Sum)
+			fmt.Printf("we have this sha1: %s...", shasum)
+			if shasum == i.Content {
+				fmt.Println("we are so happy !!!! ")
+			} else {
+				fmt.Printf("uh oh .... we are expecting: %s\n", i.Content)
+			}
+		}
+
+	}
 }
 
 func uploadFileToChunks(fileName string, chunkSize uint64) {
@@ -53,7 +107,7 @@ func uploadFileToChunks(fileName string, chunkSize uint64) {
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
-	eg := llerrgroup.New(25)
+	eg := llerrgroup.New(60)
 	for i := uint64(0); i < totalPartsNum; i++ {
 
 		partSize := uint64(math.Min(float64(ChunkSize), float64(fileSize-int64(i*ChunkSize))))
@@ -129,13 +183,26 @@ func main() {
 		log.Fatal(err)
 	}
 
+	fmt.Println(command)
 	// backup file
 	if command == "backup" {
 		uploadFileToChunks(fileName, ChunkSize)
 		os.Exit(0)
 	}
+
 	if command == "restore" {
-		//downloadFileFromChunks(fileName)
+		var fm Filemeta
+
+		y, err := ioutil.ReadFile(fileName)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = yaml.Unmarshal(y, &fm)
+		if err != nil {
+			log.Fatalf("error: %v", err)
+		}
+		downloadFileFromChunks(fm)
 		os.Exit(0)
 	}
 
