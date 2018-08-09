@@ -6,11 +6,12 @@ import (
 	"log"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
+	"time"
 
 	flags "github.com/jessevdk/go-flags"
 
-	"cloud.google.com/go/storage"
 	"github.com/abourget/llerrgroup"
 
 	yaml "gopkg.in/yaml.v2"
@@ -19,26 +20,22 @@ import (
 var (
 	ChunkSize = int64(250 * 1024 * 1024)
 	opts      struct {
-		BucketName string `long:"bucket-name" description:"GS bucket name where backups are stored" default:"eoscanada-playground-pitr"`
+		BucketName string `short:"n" long:"bucket-name" description:"GS bucket name where backups are stored" default:"eoscanada-playground-pitr"`
 
-		BucketDir string `long:"bucket-dir" description:"Prefixed directory in GS bucket where backups are stored" default:"backups"`
+		BucketFolder string `short:"f" long:"bucket-folder" description:"Prefixed folder in GS bucket where backups are stored" default:"backups"`
 
-		StateFolder string `short:"s" long:"state-folder" description:"Folder relative to cwd where state files can be found" default:"state"`
+		LocalFolder string `short:"l" long:"local-folder" description:"Folder relative to cwd where files will be backed up or restored" default:"."`
 
-		BlocksFolder string `short:"b" long:"blocks-folder" description:"Folder relative to cwd where blocks files can be found" default:"blocks"`
+		BackupTag string `short:"t" long:"backup-tag" description:"Tag for the backup, depending on activated plugins like 'history'" default:"linux_ubuntu1604_gcc4_nohistory"`
 
-		StateBackupType string `long:"state-backup-type" description:"The type of state files under which the backup is classified, because the state differs when certain plugins are present" default:"standard"`
-
-		BlocksBackupType string `long:"blocks-backup-type" description:"The type of blocks files under which the backup is classified, currently only 'standard' seems to be useful" default:"standard"`
-
-		Timestamp int64 `long:"timestamp" description:"unix timestamp before which we want the latest restorable backup" default:"0"`
-		Args      struct {
+		BeforeTimestamp int64 `short:"b" long:"before-timestamp" description:"closest timestamp (unix format) before which we want the latest restorable backup" default:"9223372036854775807"`
+		Args            struct {
 			Command string
 		} `positional-args:"yes" required:"yes"`
 	}
 )
 
-func downloadFileFromChunks(fm Filemeta, bucket *storage.BucketHandle) {
+func downloadFileFromChunks(fm Filemeta) {
 	log.Printf("Restoring file %s with size %d from snapshot dated %s\n", fm.FileName, fm.TotalSize, fm.Date)
 
 	f, err := os.OpenFile(fm.FileName, os.O_RDWR|os.O_CREATE, 0644)
@@ -90,7 +87,7 @@ func downloadFileFromChunks(fm Filemeta, bucket *storage.BucketHandle) {
 			continue
 		}
 		eg.Go(func() error {
-			newData, err := readFromGoogleStorage(blobPath, bucket)
+			newData, err := readFromGoogleStorage(blobPath)
 			if err != nil {
 				fmt.Printf("something went wrong reading, error = %s\n", err)
 				return err
@@ -109,7 +106,12 @@ func downloadFileFromChunks(fm Filemeta, bucket *storage.BucketHandle) {
 	}
 }
 
-func uploadFileToChunks(filePath string, fileName string, chunkSize int64, bucket *storage.BucketHandle) {
+func uploadFileToChunks(
+	filePath string,
+	fileName string,
+	bucketFolder string,
+	timestamp time.Time,
+) Filemeta {
 
 	f, err := os.Open(filePath)
 	defer f.Close()
@@ -119,13 +121,15 @@ func uploadFileToChunks(filePath string, fileName string, chunkSize int64, bucke
 
 	fileInfo, _ := f.Stat()
 	fm := Filemeta{
-		FileName:      fileName,
-		TotalSize:     fileInfo.Size(),
-		BlobsLocation: "",
+		Kind:        "blobMap",
+		Metaversion: "v1",
+		FileName:    fileName,
+		TotalSize:   fileInfo.Size(),
+		Date:        timestamp,
 	}
 
 	// calculate total number of parts the file will be chunked into
-	totalPartsNum := int64(math.Ceil(float64(fm.TotalSize) / float64(chunkSize)))
+	totalPartsNum := int64(math.Ceil(float64(fm.TotalSize) / float64(ChunkSize)))
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
@@ -143,70 +147,94 @@ func uploadFileToChunks(filePath string, fileName string, chunkSize int64, bucke
 
 		if !blockIsEmpty {
 			cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
-			fileName := cm.Content + ".blob"
+			fileName := path.Join(bucketFolder, cm.Content+".blob")
 
 			if eg.Stop() {
 				continue // short-circuit the loop if we got an error
 			}
+			cm.URL = getStorageFileURL(fileName)
 			eg.Go(func() error {
-				if checkFileExistsOnGoogleStorage(fileName, bucket) {
+				itExists := checkFileExistsOnGoogleStorage(fileName)
+				if itExists {
 					log.Printf("File already exists: %s\n", fileName)
 					return nil
 				} else {
-					url, err := writeToGoogleStorage(fileName, partBuffer, bucket)
-					fmt.Printf("Wrote file: %s\n", url)
-					return err
+					_, err := writeToGoogleStorage(fileName, partBuffer, true)
+					if err != nil {
+						return err
+					}
+					return nil
 				}
 			})
 		}
 
 		fm.Chunks = append(fm.Chunks, cm)
 	}
+	fmt.Printf("%+v\n", fm)
 	if err := eg.Wait(); err != nil {
 		log.Fatalln(err)
 	}
-	d, err := yaml.Marshal(&fm)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	fmt.Printf("file meta is: \n---\n%s\n", string(d))
+	return fm
 
-}
-
-func initializeBucket(bucketName string) (buck *storage.BucketHandle, err error) {
-	buck, err = configureStorage(bucketName)
-	return
 }
 
 func generateBackup() error {
-	bucket, err := initializeBucket(opts.BucketName)
+	err := configureStorage(opts.BucketName)
 	if err != nil {
 		return err
 	}
 
-	_ = bucket
-	dirs, err := getDirFiles(opts.StateFolder)
+	now := time.Now()
+	bm := Backupmeta{
+		Date:        now,
+		Tag:         opts.BackupTag,
+		Kind:        "filesMap",
+		Metaversion: "v1",
+	}
+	nowString := fmt.Sprintf(time.Now().UTC().Format(time.RFC3339))
+
+	dirs, err := getDirFiles(opts.LocalFolder)
 	for _, file := range dirs {
-		fileName, err := filepath.Rel(opts.StateFolder, file)
+		fileName, err := filepath.Rel(opts.LocalFolder, file)
 		if err != nil {
 			return err
 		}
 
-		// add errorhandling, get yaml content...
-		// prepare metayaml
-		uploadFileToChunks(file, fileName, ChunkSize, bucket)
+		fm := uploadFileToChunks(file, fileName, path.Join(opts.BucketFolder, "blobs"), now)
+
+		yamlURL := uploadYamlFile(fm, path.Join(opts.BucketFolder, opts.BackupTag, nowString, "yaml", fm.FileName+".yaml"))
+		bm.MetadataFiles = append(bm.MetadataFiles, yamlURL)
 	}
-	dirs, err = getDirFiles(opts.BlocksFolder)
-	for _, file := range dirs {
-		fileName, err := filepath.Rel(opts.BlocksFolder, file)
-		if err != nil {
-			return err
-		}
-		// add errorhandling, get yaml content...
-		// prepare metayaml
-		uploadFileToChunks(file, fileName, ChunkSize, bucket)
-	}
+	yamlURL := uploadBackupMetaYamlFile(bm, path.Join(opts.BucketFolder, opts.BackupTag, nowString, "index.yaml"))
+	fmt.Printf("whole files meta: %s\n", yamlURL)
 	return nil
+}
+
+func uploadBackupMetaYamlFile(bm Backupmeta, filePath string) (url string) {
+	d, err := yaml.Marshal(&bm)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	url, err = writeToGoogleStorage(filePath, d, false)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	return
+
+}
+
+func uploadYamlFile(fm Filemeta, filePath string) (url string) {
+
+	d, err := yaml.Marshal(&fm)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	url, err = writeToGoogleStorage(filePath, d, false)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+
+	return
 }
 
 func main() {
@@ -216,6 +244,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	fmt.Printf("%+v\n", opts)
 	switch opts.Args.Command {
 	case "backup":
 		err := generateBackup()

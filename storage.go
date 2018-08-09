@@ -10,48 +10,61 @@ import (
 	"io/ioutil"
 )
 
-func configureStorage(bucketID string) (*storage.BucketHandle, error) {
+var (
+	storageBucket     *storage.BucketHandle
+	storageBucketName string
+)
+
+func configureStorage(bucketID string) (err error) {
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return client.Bucket(bucketID), nil
+	storageBucket = client.Bucket(bucketID)
+	storageBucketName = bucketID
+	return
 }
 
-func writeToGoogleStorage(filename string, data []byte, bucket *storage.BucketHandle) (string, error) {
+func writeToGoogleStorage(filename string, data []byte, encrypt bool) (string, error) {
+	if storageBucket == nil {
+		return "", fmt.Errorf("storage bucket not initialized")
+	}
 
 	ctx := context.Background()
-	w := bucket.Object(filename).NewWriter(ctx)
-	// would make readable publicly
-	//w.ACL = []storage.ACLRule{{Entity: storage.AllUsers, Role: storage.RoleReader}}
+	w := storageBucket.Object(filename).NewWriter(ctx)
+	defer w.Close()
 	w.ContentType = "application/octet-stream"
 	w.CacheControl = "public, max-age=86400"
 
-	w.ContentEncoding = "gzip"
-	gw := gzip.NewWriter(w)
 	f := bytes.NewReader(data)
 
-	if _, err := io.Copy(gw, f); err != nil {
-		return "", err
-	}
-	if err := gw.Close(); err != nil {
-		return "", err
-	}
-	if err := w.Close(); err != nil {
-		return "", err
+	if encrypt {
+		w.ContentEncoding = "gzip"
+		gw := gzip.NewWriter(w)
+		defer gw.Close()
+		if _, err := io.Copy(gw, f); err != nil {
+			return "", err
+		}
+	} else {
+		if _, err := io.Copy(w, f); err != nil {
+			return "", err
+		}
 	}
 
-	const publicURL = "https://storage.googleapis.com/%s/%s"
-	return fmt.Sprintf(publicURL, opts.BucketName, filename), nil
+	const publicURL = "gs://%s/%s"
+	return fmt.Sprintf(publicURL, storageBucketName, filename), nil
 
 }
 
-func readFromGoogleStorage(filename string, bucket *storage.BucketHandle) (data []byte, err error) {
+func readFromGoogleStorage(filename string) (data []byte, err error) {
 
+	if storageBucket == nil {
+		return nil, fmt.Errorf("storage bucket not initialized")
+	}
 	ctx := context.Background()
 
-	r, err := bucket.Object(filename).NewReader(ctx)
+	r, err := storageBucket.Object(filename).NewReader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +73,18 @@ func readFromGoogleStorage(filename string, bucket *storage.BucketHandle) (data 
 	return ioutil.ReadAll(r)
 }
 
-func checkFileExistsOnGoogleStorage(fileName string, bucket *storage.BucketHandle) bool {
+func getStorageFileURL(fileName string) string {
+	return fmt.Sprintf("gs://%s/%s", storageBucketName, fileName)
+}
+
+func checkFileExistsOnGoogleStorage(fileName string) bool {
+	// we don't return errors because non-existing usually returns an error.
+	// error means false
+	if storageBucket == nil {
+		return false
+	}
 	ctx := context.Background()
-	o := bucket.Object(fileName)
+	o := storageBucket.Object(fileName)
 	attrs, err := o.Attrs(ctx)
 	if err != nil {
 		return false
