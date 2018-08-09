@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 
 	fibmap "github.com/frostschutz/go-fibmap"
@@ -82,4 +83,18 @@ func isEmptyChunk(s []byte) bool {
 		}
 	}
 	return true
+}
+
+func getDirFiles(directory string) (fileNames []string, err error) {
+	err = filepath.Walk(directory, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return err
+		}
+		fileNames = append(fileNames, path)
+		return nil
+	})
+	return
 }

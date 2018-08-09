@@ -66,7 +66,7 @@ types de données:
    gs://eoscanada-playground-pitr/backups/blocks/standard/1008385183/reversible/shared_memory.meta.yaml
    ```
   * conditions:
-     {dest-prefix}: `backups`
+     {bucket-dir}: `backups`
      {data-type}: `state` or `blocks` # calculated for each defined folder
      {filename}: `reversible/shared_memory.bin` or `blocks.log` # calculated from "os.Walk"
      {backup-type}: `standard` ou `history`? ... # comes from "state-backup-type" and "blocks-backup-type"
@@ -79,8 +79,8 @@ types de données:
     `gs://{bucket-name}/{dest-prefix}/{data-type}/{backup-type}/{timestamp}/{filename}.yaml`
 
     #example with all default values !
-    ./pitreos backup --dest-prefix=backups --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard
-    ./pitreos restore --source-prefix=backups  --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard --timestamp=1008385183
+    ./pitreos backup --bucket-dir=backups --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard
+    ./pitreos restore --bucket-dir=backups  --state-folder=state --blocks-folder=blocks --bucket-name=eoscanada-playground-pitr --state-backup-type=standard --blocks-backup-type=standard --timestamp=1008385183
 
     #note: we could have a "recent.yaml" file to which we append the "recent" ( 3months ???) successful backups which we can serve for different backup-types
     - timestamp: 1235477665
