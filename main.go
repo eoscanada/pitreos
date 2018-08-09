@@ -78,7 +78,7 @@ func downloadFileFromChunks(fm Filemeta) {
 		}
 
 		fmt.Printf("...instead of sha1sum %s. Downloading...\n", i.Content)
-		blobPath := fmt.Sprintf("%s.blob", i.Content)
+		blobPath := getStorageFilePath(i.URL)
 		blobStart := i.Start
 		thischunk := n
 		expectedSum := i.Content
@@ -194,7 +194,8 @@ func restoreFromBackup() error {
 
 	bm := downloadBackupMetaYamlFile(wantedBackupYAML)
 	for _, y := range bm.MetadataFiles {
-		fmt.Println(getStorageFilePath(y))
+		fm := downloadYamlFile(getStorageFilePath(y))
+		downloadFileFromChunks(*fm)
 	}
 
 	return nil
@@ -242,7 +243,6 @@ func uploadBackupMetaYamlFile(bm Backupmeta, filePath string) (url string) {
 		log.Fatalf("error: %v", err)
 	}
 	return
-
 }
 
 func downloadBackupMetaYamlFile(filePath string) *Backupmeta {
@@ -256,6 +256,19 @@ func downloadBackupMetaYamlFile(filePath string) *Backupmeta {
 		log.Fatalf("error: %v", err)
 	}
 	return &bm
+}
+
+func downloadYamlFile(filePath string) *Filemeta {
+	y, err := readFromGoogleStorage(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var fm Filemeta
+	if err = yaml.Unmarshal(y, &fm); err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	return &fm
 }
 
 func uploadYamlFile(fm Filemeta, filePath string) (url string) {
