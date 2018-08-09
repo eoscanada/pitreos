@@ -127,6 +127,10 @@ func getStorageFileURL(fileName string) string {
 	return fmt.Sprintf("gs://%s/%s", storageBucketName, fileName)
 }
 
+func getStorageFilePath(URL string) string {
+	return strings.TrimPrefix(URL, fmt.Sprintf("gs://%s/", storageBucketName))
+}
+
 func checkFileExistsOnGoogleStorage(fileName string) bool {
 	// we don't return errors because non-existing usually returns an error.
 	// error means false

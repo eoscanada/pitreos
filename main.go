@@ -187,11 +187,15 @@ func restoreFromBackup() error {
 		opts.BeforeTimestamp = time.Now().Unix()
 	}
 
-	wantedBackupURL, err := findAvailableBackup(opts.BeforeTimestamp, opts.BucketFolder, opts.BackupTag)
+	wantedBackupYAML, err := findAvailableBackup(opts.BeforeTimestamp, opts.BucketFolder, opts.BackupTag)
 	if err != nil {
 		return err
 	}
-	fmt.Println(wantedBackupURL)
+
+	bm := downloadBackupMetaYamlFile(wantedBackupYAML)
+	for _, y := range bm.MetadataFiles {
+		fmt.Println(getStorageFilePath(y))
+	}
 
 	return nil
 }
@@ -242,8 +246,18 @@ func uploadBackupMetaYamlFile(bm Backupmeta, filePath string) (url string) {
 }
 
 func downloadBackupMetaYamlFile(filePath string) *Backupmeta {
-	//    err := yaml.Unmarshal()
+	y, err := readFromGoogleStorage(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var bm Backupmeta
+	if err = yaml.Unmarshal(y, &bm); err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	return &bm
 }
+
 func uploadYamlFile(fm Filemeta, filePath string) (url string) {
 
 	d, err := yaml.Marshal(&fm)
@@ -265,7 +279,6 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	fmt.Printf("%+v\n", opts)
 	switch opts.Args.Command {
 	case "backup":
 		err := generateBackup()
