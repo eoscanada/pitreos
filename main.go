@@ -28,7 +28,7 @@ var (
 
 		BackupTag string `short:"t" long:"backup-tag" description:"Tag for the backup, depending on activated plugins like 'history'" default:"linux_ubuntu1604_gcc4_nohistory"`
 
-		BeforeTimestamp int64 `short:"b" long:"before-timestamp" description:"closest timestamp (unix format) before which we want the latest restorable backup" default:"9223372036854775807"`
+		BeforeTimestamp int64 `short:"b" long:"before-timestamp" description:"closest timestamp (unix format) before which we want the latest restorable backup" default:"now"`
 		Args            struct {
 			Command string
 		} `positional-args:"yes" required:"yes"`
@@ -178,6 +178,24 @@ func uploadFileToChunks(
 
 }
 
+func restoreFromBackup() error {
+	err := configureStorage(opts.BucketName)
+	if err != nil {
+		return err
+	}
+	if opts.BeforeTimestamp == 0 {
+		opts.BeforeTimestamp = time.Now().Unix()
+	}
+
+	wantedBackupURL, err := findAvailableBackup(opts.BeforeTimestamp, opts.BucketFolder, opts.BackupTag)
+	if err != nil {
+		return err
+	}
+	fmt.Println(wantedBackupURL)
+
+	return nil
+}
+
 func generateBackup() error {
 	err := configureStorage(opts.BucketName)
 	if err != nil {
@@ -223,6 +241,9 @@ func uploadBackupMetaYamlFile(bm Backupmeta, filePath string) (url string) {
 
 }
 
+func downloadBackupMetaYamlFile(filePath string) *Backupmeta {
+	//    err := yaml.Unmarshal()
+}
 func uploadYamlFile(fm Filemeta, filePath string) (url string) {
 
 	d, err := yaml.Marshal(&fm)
@@ -253,12 +274,10 @@ func main() {
 		}
 
 	case "restore":
-		fmt.Println("trying to find what to download")
-		//err := restoreFromBackup()
-		//if err != nil {
-	//		log.Fatalln(err)
-	//	}
-	// downloadFileFromChunks(fm, bucket)
+		err := restoreFromBackup()
+		if err != nil {
+			log.Fatalln(err)
+		}
 	default:
 		log.Fatalln("Unknown command", opts.Args.Command)
 	}

@@ -2,12 +2,17 @@ package main
 
 import (
 	"bytes"
-	"cloud.google.com/go/storage"
 	"compress/gzip"
 	"fmt"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
+	"path"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/storage"
+	"golang.org/x/net/context"
+	"google.golang.org/api/iterator"
 )
 
 var (
@@ -23,6 +28,52 @@ func configureStorage(bucketID string) (err error) {
 	}
 	storageBucket = client.Bucket(bucketID)
 	storageBucketName = bucketID
+	return
+}
+
+func findAvailableBackup(
+	beforeTimestamp int64,
+	bucketFolder string,
+	backupTag string,
+) (latestValidFilepath string, err error) {
+	if storageBucket == nil {
+		return "", fmt.Errorf("storage bucket not initialized")
+	}
+
+	timeString := fmt.Sprintf(time.Unix(beforeTimestamp, 0).UTC().Format(time.RFC3339))
+	prefix := fmt.Sprintf(path.Join(bucketFolder, backupTag))
+
+	latestValidTimestamp := ""
+	ctx := context.Background()
+	iter := storageBucket.Objects(ctx, &storage.Query{Prefix: prefix})
+	for {
+		objAttrs, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+
+		if objAttrs == nil {
+			return "", fmt.Errorf("Error, probably missing permissions...")
+		}
+		if strings.HasSuffix(objAttrs.Name, "index.yaml") {
+			thisTimestamp := strings.TrimSuffix(strings.TrimPrefix(objAttrs.Name, prefix+"/"), "/index.yaml")
+
+			if thisTimestamp < timeString { //valid timestamp
+				if thisTimestamp > latestValidTimestamp { //newer
+					latestValidTimestamp = thisTimestamp
+					latestValidFilepath = objAttrs.Name
+				}
+			}
+		}
+	}
+
+	if latestValidFilepath == "" {
+		err = fmt.Errorf("cannot find any")
+	}
+
 	return
 }
 
@@ -52,8 +103,7 @@ func writeToGoogleStorage(filename string, data []byte, encrypt bool) (string, e
 		}
 	}
 
-	const publicURL = "gs://%s/%s"
-	return fmt.Sprintf(publicURL, storageBucketName, filename), nil
+	return getStorageFileURL(filename), nil
 
 }
 
