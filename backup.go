@@ -14,8 +14,7 @@ import (
 )
 
 func (p *PITR) GenerateBackup() error {
-	err := p.setupStorage()
-	if err != nil {
+	if err := p.setupStorage(); err != nil {
 		return err
 	}
 
@@ -35,18 +34,19 @@ func (p *PITR) GenerateBackup() error {
 			return err
 		}
 
-		fm, err := p.uploadFileToChunks(filePath, relName, path.Join(p.Options.BucketFolder, "blobs"), now)
+		fileMeta, err := p.uploadFileToChunks(filePath, relName, path.Join(p.Options.BucketFolder, "blobs"), now)
 		if err != nil {
 			return fmt.Errorf("upload file to chunks: %s", err)
 		}
 
-		yamlURL, err := p.uploadYamlFile(fm, path.Join(p.Options.BucketFolder, p.Options.BackupTag, nowString, "yaml", fm.FileName+".yaml"))
+		yamlURL, err := p.uploadYamlFile(fileMeta, path.Join(p.Options.BucketFolder, p.Options.BackupTag, nowString, "yaml", fileMeta.FileName+".yaml"))
 		if err != nil {
 			return fmt.Errorf("upload yaml: %s", err)
 		}
 
 		bm.MetadataFiles = append(bm.MetadataFiles, yamlURL)
 	}
+
 	yamlURL, err := p.uploadBackupMetaYamlFile(bm, path.Join(p.Options.BucketFolder, p.Options.BackupTag, nowString, "index.yaml"))
 	if err != nil {
 		return fmt.Errorf("upload backup meta: %s", err)
@@ -66,7 +66,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	defer f.Close()
 
 	fileInfo, _ := f.file.Stat()
-	fm := &FileMeta{
+	fileMeta := &FileMeta{
 		Kind:        "blobMap",
 		MetaVersion: "v1",
 		FileName:    fileName,
@@ -75,7 +75,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	}
 
 	// calculate total number of parts the file will be chunked into
-	totalPartsNum := int64(math.Ceil(float64(fm.TotalSize) / float64(p.chunkSize)))
+	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
 
 	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
 
@@ -83,7 +83,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	chunkCh := make(chan *ChunkMeta, 1000)
 	go func() {
 		for chunk := range chunkCh {
-			fm.Chunks = append(fm.Chunks, chunk)
+			fileMeta.Chunks = append(fileMeta.Chunks, chunk)
 		}
 		done <- true
 	}()
@@ -97,25 +97,25 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 		eg.Go(func() error {
 			log.Printf("Processing part %d of %d ###\n", i, totalPartsNum)
 
-			partSize := int64(math.Min(float64(p.chunkSize), float64(fm.TotalSize-int64(i*p.chunkSize))))
+			partSize := int64(math.Min(float64(p.chunkSize), float64(fileMeta.TotalSize-int64(i*p.chunkSize))))
 
-			cm := &ChunkMeta{
+			chunkMeta := &ChunkMeta{
 				Start: i * p.chunkSize,
 				End:   i*p.chunkSize + partSize - 1,
 			}
 
-			partBuffer, blockIsEmpty, err := f.getLocalChunk(cm.Start, partSize)
+			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
 			if err != nil {
 				return fmt.Errorf("get chunk contents: %s", err)
 			}
 
-			cm.IsEmpty = blockIsEmpty
+			chunkMeta.IsEmpty = blockIsEmpty
 
 			if !blockIsEmpty {
-				cm.Content = fmt.Sprintf("%x", sha1.Sum(partBuffer))
-				fileName := path.Join(bucketFolder, cm.Content+".blob")
+				chunkMeta.ContentSHA1 = fmt.Sprintf("%x", sha1.Sum(partBuffer))
+				fileName := path.Join(bucketFolder, chunkMeta.ContentSHA1+".blob")
 
-				cm.URL = p.getStorageFileURL(fileName)
+				chunkMeta.URL = p.getStorageFileURL(fileName)
 				exists := p.checkFileExistsOnGoogleStorage(fileName)
 				if exists {
 					log.Printf("File already exists: %s\n", fileName)
@@ -127,14 +127,14 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 				}
 			}
 
-			chunkCh <- cm
+			chunkCh <- chunkMeta
 
 			return nil
 		})
 
 	}
 
-	//json.NewEncoder(os.Stdout).Encode(fm)
+	//json.NewEncoder(os.Stdout).Encode(fileMeta)
 
 	if err := eg.Wait(); err != nil {
 		log.Fatalln(err)
@@ -143,7 +143,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	close(chunkCh)
 	<-done
 
-	return fm, nil
+	return fileMeta, nil
 
 }
 
@@ -155,8 +155,8 @@ func (p *PITR) uploadBackupMetaYamlFile(bm BackupMeta, filePath string) (url str
 	return p.writeToGoogleStorage(filePath, d, false)
 }
 
-func (p *PITR) uploadYamlFile(fm *FileMeta, filePath string) (url string, err error) {
-	d, err := yaml.Marshal(&fm)
+func (p *PITR) uploadYamlFile(fileMeta *FileMeta, filePath string) (url string, err error) {
+	d, err := yaml.Marshal(&fileMeta)
 	if err != nil {
 		return "", fmt.Errorf("yaml marshal: %s", err)
 	}

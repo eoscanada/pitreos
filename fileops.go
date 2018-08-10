@@ -10,11 +10,6 @@ import (
 	fibmap "github.com/frostschutz/go-fibmap"
 )
 
-var (
-	mutex      = &sync.Mutex{}
-	knownFiles = map[*os.File]ExtendedFile{}
-)
-
 type FileOps struct {
 	filePath  string
 	readWrite bool
@@ -154,6 +149,9 @@ func getDirFiles(directory string) (fileNames []string, err error) {
 		if info.IsDir() {
 			return err
 		}
+
+		// FIXME: Add support for symbolic links, other special files like FIFO and weird oddities.
+
 		fileNames = append(fileNames, path)
 		return nil
 	})

@@ -15,13 +15,14 @@ import (
 )
 
 func (p *PITR) RestoreFromBackup() error {
-	err := p.setupStorage()
-	if err != nil {
+	if err := p.setupStorage(); err != nil {
 		return err
 	}
+
 	if p.Options.BeforeTimestamp == 0 {
 		p.Options.BeforeTimestamp = time.Now().Unix()
 	}
+
 	wantedBackupYAML, err := p.findAvailableBackup()
 	if err != nil {
 		return err
@@ -33,7 +34,6 @@ func (p *PITR) RestoreFromBackup() error {
 	}
 
 	for _, y := range bm.MetadataFiles {
-
 		var fm *FileMeta
 		if err := p.downloadYaml(p.getStorageFilePath(y), &fm); err != nil {
 			return err
@@ -103,21 +103,21 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("Chunk %d/%d empty, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.Content, numBytes)
+				log.Printf("Chunk %d/%d empty, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
 			} else {
 				readSHA1Sum := sha1.Sum(partBuffer)
 				shasum := fmt.Sprintf("%x", readSHA1Sum)
-				if shasum == chunkMeta.Content {
+				if shasum == chunkMeta.ContentSHA1 {
 					log.Printf("Chunk %d/%d has correct contents already", n+1, numChunks)
 					return nil
 				}
-				log.Printf("Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.Content, numBytes)
+				log.Printf("Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
 			}
 
 			blobPath := p.getStorageFilePath(chunkMeta.URL)
 
 			blobStart := chunkMeta.Start
-			expectedSum := chunkMeta.Content
+			expectedSum := chunkMeta.ContentSHA1
 			newData, err := p.readFromGoogleStorage(blobPath)
 			if err != nil {
 				log.Printf("Something went wrong reading, error = %s\n", err)

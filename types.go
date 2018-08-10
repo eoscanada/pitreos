@@ -2,38 +2,31 @@ package pitreos
 
 import (
 	"time"
-
-	fibmap "github.com/frostschutz/go-fibmap"
 )
 
 type ChunkMeta struct {
-	Start   int64
-	End     int64
-	Content string
-	IsEmpty bool
-	URL     string
+	Start       int64  `yaml:"start"`
+	End         int64  `yaml:"end"`
+	IsEmpty     bool   `yaml:"is_empty"`
+	ContentSHA1 string `yaml:"content_sha1"` // content ?
+	URL         string `yaml:"url"`
 }
 
 type FileMeta struct {
-	Kind        string
-	MetaVersion string
-	FileName    string
-	Date        time.Time
-	TotalSize   int64
-	Chunks      []*ChunkMeta
-}
-
-type ExtendedFile struct {
-	SparseSupported bool
-	Extents         []fibmap.Extent
+	Kind        string       `yaml:"kind"`
+	MetaVersion string       `yaml:"meta_version"`
+	FileName    string       `yaml:"filename"`
+	Date        time.Time    `yaml:"date"`
+	TotalSize   int64        `yaml:"total_size"`
+	Chunks      []*ChunkMeta `yaml:"chunks"`
 }
 
 type BackupMeta struct {
-	Kind          string
-	MetaVersion   string
-	Tag           string
-	Date          time.Time
-	MetadataFiles []string
+	Kind          string    `yaml:"kind"`
+	MetaVersion   string    `yaml:"meta_version"`
+	Tag           string    `yaml:"tag"`
+	Date          time.Time `yaml:"date"`
+	MetadataFiles []string  `yaml:"metadata_files"`
 }
 
 type PitreosOptions struct {
