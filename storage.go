@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"path"
 	"path/filepath"
 	"strings"
@@ -16,37 +17,27 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-var (
-	storageBucket     *storage.BucketHandle
-	storageBucketName string
-)
-
-func configureStorage(bucketID string) (err error) {
+func (p *PITR) setupStorage() (err error) {
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return
 	}
-	storageBucket = client.Bucket(bucketID)
-	storageBucketName = bucketID
+	p.storageBucket = client.Bucket(p.Options.BucketName)
 	return
 }
 
-func findAvailableBackup(
-	beforeTimestamp int64,
-	bucketFolder string,
-	backupTag string,
-) (latestValidFilepath string, err error) {
-	if storageBucket == nil {
+func (p *PITR) findAvailableBackup() (latestValidFilepath string, err error) {
+	if p.storageBucket == nil {
 		return "", fmt.Errorf("storage bucket not initialized")
 	}
 
-	timeString := fmt.Sprintf(time.Unix(beforeTimestamp, 0).UTC().Format(time.RFC3339))
-	prefix := fmt.Sprintf(path.Join(bucketFolder, backupTag))
+	timeString := fmt.Sprintf(time.Unix(p.Options.BeforeTimestamp, 0).UTC().Format(time.RFC3339))
+	prefix := fmt.Sprintf(path.Join(p.Options.BucketFolder, p.Options.BackupTag))
 
 	latestValidTimestamp := ""
 	ctx := context.Background()
-	iter := storageBucket.Objects(ctx, &storage.Query{Prefix: prefix})
+	iter := p.storageBucket.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
 		objAttrs, err := iter.Next()
 		if err == iterator.Done {
@@ -60,7 +51,7 @@ func findAvailableBackup(
 			return "", fmt.Errorf("Error, probably missing permissions...")
 		}
 		if strings.HasSuffix(objAttrs.Name, "index.yaml") && filepath.Dir(filepath.Dir(objAttrs.Name)) == prefix {
-			fmt.Println("found name is " + objAttrs.Name)
+			//log.Println("Found name is " + objAttrs.Name)
 			thisTimestamp := strings.TrimSuffix(strings.TrimPrefix(objAttrs.Name, prefix+"/"), "/index.yaml")
 
 			if thisTimestamp < timeString { //valid timestamp
@@ -76,24 +67,24 @@ func findAvailableBackup(
 		err = fmt.Errorf("cannot find any")
 	}
 
-	fmt.Println("valid file path: " + latestValidFilepath)
+	log.Println("Restoring from this backup file: " + p.getStorageFileURL(latestValidFilepath))
 	return
 }
 
-func writeToGoogleStorage(filename string, data []byte, encrypt bool) (string, error) {
-	if storageBucket == nil {
+func (p *PITR) writeToGoogleStorage(filename string, data []byte, compress bool) (string, error) {
+	if p.storageBucket == nil {
 		return "", fmt.Errorf("storage bucket not initialized")
 	}
 
 	ctx := context.Background()
-	w := storageBucket.Object(filename).NewWriter(ctx)
+	w := p.storageBucket.Object(filename).NewWriter(ctx)
 	defer w.Close()
 	w.ContentType = "application/octet-stream"
 	w.CacheControl = "public, max-age=86400"
 
 	f := bytes.NewReader(data)
 
-	if encrypt {
+	if compress {
 		w.ContentEncoding = "gzip"
 		gw := gzip.NewWriter(w)
 		defer gw.Close()
@@ -106,18 +97,17 @@ func writeToGoogleStorage(filename string, data []byte, encrypt bool) (string, e
 		}
 	}
 
-	return getStorageFileURL(filename), nil
-
+	return p.getStorageFileURL(filename), nil
 }
 
-func readFromGoogleStorage(filename string) (data []byte, err error) {
+func (p *PITR) readFromGoogleStorage(filename string) (data []byte, err error) {
 
-	if storageBucket == nil {
+	if p.storageBucket == nil {
 		return nil, fmt.Errorf("storage bucket not initialized")
 	}
 	ctx := context.Background()
 
-	r, err := storageBucket.Object(filename).NewReader(ctx)
+	r, err := p.storageBucket.Object(filename).NewReader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -126,22 +116,22 @@ func readFromGoogleStorage(filename string) (data []byte, err error) {
 	return ioutil.ReadAll(r)
 }
 
-func getStorageFileURL(fileName string) string {
-	return fmt.Sprintf("gs://%s/%s", storageBucketName, fileName)
+func (p *PITR) getStorageFileURL(fileName string) string {
+	return fmt.Sprintf("gs://%s/%s", p.Options.BucketName, fileName)
 }
 
-func getStorageFilePath(URL string) string {
-	return strings.TrimPrefix(URL, fmt.Sprintf("gs://%s/", storageBucketName))
+func (p *PITR) getStorageFilePath(URL string) string {
+	return strings.TrimPrefix(URL, fmt.Sprintf("gs://%s/", p.Options.BucketName))
 }
 
-func checkFileExistsOnGoogleStorage(fileName string) bool {
+func (p *PITR) checkFileExistsOnGoogleStorage(fileName string) bool {
 	// we don't return errors because non-existing usually returns an error.
 	// error means false
-	if storageBucket == nil {
+	if p.storageBucket == nil {
 		return false
 	}
 	ctx := context.Background()
-	o := storageBucket.Object(fileName)
+	o := p.storageBucket.Object(fileName)
 	attrs, err := o.Attrs(ctx)
 	if err != nil {
 		return false

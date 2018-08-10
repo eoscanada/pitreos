@@ -6,7 +6,7 @@ import (
 	fibmap "github.com/frostschutz/go-fibmap"
 )
 
-type Chunkmeta struct {
+type ChunkMeta struct {
 	Start   int64
 	End     int64
 	Content string
@@ -14,13 +14,13 @@ type Chunkmeta struct {
 	URL     string
 }
 
-type Filemeta struct {
+type FileMeta struct {
 	Kind        string
-	Metaversion string
+	MetaVersion string
 	FileName    string
 	Date        time.Time
 	TotalSize   int64
-	Chunks      []Chunkmeta
+	Chunks      []*ChunkMeta
 }
 
 type ExtendedFile struct {
@@ -28,9 +28,9 @@ type ExtendedFile struct {
 	Extents         []fibmap.Extent
 }
 
-type Backupmeta struct {
+type BackupMeta struct {
 	Kind          string
-	Metaversion   string
+	MetaVersion   string
 	Tag           string
 	Date          time.Time
 	MetadataFiles []string

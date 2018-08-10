@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/eoscanada/pitreos"
-	flags "github.com/jessevdk/go-flags"
 	"log"
 	"os"
+
+	"github.com/eoscanada/pitreos"
+	flags "github.com/jessevdk/go-flags"
 )
 
 func main() {
@@ -15,18 +16,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	pitre := pitreos.New(&opts)
+
 	switch opts.Args.Command {
 	case "backup":
-		err := pitreos.GenerateBackup(&opts)
+		err := pitre.GenerateBackup()
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 	case "restore":
-		err := pitreos.RestoreFromBackup(&opts)
+		err := pitre.RestoreFromBackup()
 		if err != nil {
 			log.Fatalln(err)
 		}
+
 	default:
 		log.Fatalln("Unknown command", opts.Args.Command)
 	}
