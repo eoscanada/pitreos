@@ -11,16 +11,18 @@ import (
 	"time"
 
 	"github.com/abourget/llerrgroup"
+	humanize "github.com/dustin/go-humanize"
 
 	yaml "gopkg.in/yaml.v2"
 )
 
 var (
-	ChunkSize = int64(250 * 1024 * 1024)
+	ChunkSize      = int64(250 * 1024 * 1024)
+	NetworkThreads = 10
 )
 
 func downloadFileFromChunks(fm Filemeta, localFolder string) error {
-	log.Printf("Restoring file %s with size %d from snapshot dated %s\n", fm.FileName, fm.TotalSize, fm.Date)
+	log.Printf("Restoring file %s with size %s from snapshot dated %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)), fm.Date)
 
 	filePath := filepath.Join(localFolder, fm.FileName)
 
@@ -38,53 +40,52 @@ func downloadFileFromChunks(fm Filemeta, localFolder string) error {
 		return err
 	}
 
-	eg := llerrgroup.New(10)
+	eg := llerrgroup.New(NetworkThreads)
+	numChunks := len(fm.Chunks)
 	for n, i := range fm.Chunks {
 
-		partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, int64(i.Start), int64(i.End-i.Start+1))
-
-		if blockIsEmpty {
-			fmt.Printf("block #%d is empty: ", n)
-			if i.IsEmpty {
-				fmt.Println("...Excellent")
-				continue
-			}
-		} else {
-			readSHA1Sum := sha1.Sum(partBuffer)
-			shasum := fmt.Sprintf("%x", readSHA1Sum)
-			fmt.Printf("block #%d has this sha1: %s...", n, shasum)
-			if shasum == i.Content {
-				fmt.Println("...Excellent")
-				continue
-			}
-		}
-
-		if i.IsEmpty {
-			log.Println("...Punching a hole through")
-			err := wipeChunk(f, i.Start, i.End-i.Start+1)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-
-		fmt.Printf("...instead of sha1sum %s. Downloading...\n", i.Content)
-		blobPath := getStorageFilePath(i.URL)
-		blobStart := i.Start
-		thischunk := n
-		expectedSum := i.Content
 		if eg.Stop() {
-			fmt.Println("got stop signal")
-			continue
+			return fmt.Errorf("Got an error in thread management. Stopping.")
 		}
 		eg.Go(func() error {
+
+			partBuffer, blockIsEmpty := getChunkContentUnlessEmpty(f, int64(i.Start), int64(i.End-i.Start+1))
+
+			if blockIsEmpty {
+				if i.IsEmpty {
+					log.Printf("Skipping empty chunk #%d / %d", n, numChunks)
+					return nil
+				}
+			} else {
+				readSHA1Sum := sha1.Sum(partBuffer)
+				shasum := fmt.Sprintf("%x", readSHA1Sum)
+				if shasum == i.Content {
+					log.Printf("Skipping correct chunk #%d / %d", n, numChunks)
+					return nil
+				}
+			}
+
+			if i.IsEmpty {
+				log.Printf("Punching a hole through chunk #%d / %d", n, numChunks)
+				err := wipeChunk(f, i.Start, i.End-i.Start+1)
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+
+			fmt.Printf("Downloading... chunk #%d / %d with SHA1 %s\n (%s)", n, numChunks, i.Content, humanize.Bytes(uint64(i.End-i.Start-1)))
+			blobPath := getStorageFilePath(i.URL)
+			blobStart := i.Start
+			thischunk := n
+			expectedSum := i.Content
 			newData, err := readFromGoogleStorage(blobPath)
 			if err != nil {
-				fmt.Printf("something went wrong reading, error = %s\n", err)
+				log.Printf("Something went wrong reading, error = %s\n", err)
 				return err
 			}
 			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
-			fmt.Printf("Got chunk #%d with new sum: %s\n", thischunk, newSHA1Sum)
+			log.Printf("Finished downloading chunk #%d / %d with new sum: %s\n", thischunk, numChunks, newSHA1Sum)
 			if expectedSum != newSHA1Sum {
 				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
 			}
