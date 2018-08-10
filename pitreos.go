@@ -1,4 +1,4 @@
-package main
+package pitreos
 
 import (
 	"crypto/sha1"
@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	flags "github.com/jessevdk/go-flags"
-
 	"github.com/abourget/llerrgroup"
 
 	yaml "gopkg.in/yaml.v2"
@@ -19,32 +17,25 @@ import (
 
 var (
 	ChunkSize = int64(250 * 1024 * 1024)
-	opts      struct {
-		BucketName string `short:"n" long:"bucket-name" description:"GS bucket name where backups are stored" default:"eoscanada-playground-pitr"`
-
-		BucketFolder string `short:"f" long:"bucket-folder" description:"Prefixed folder in GS bucket where backups are stored" default:"backups"`
-
-		LocalFolder string `short:"l" long:"local-folder" description:"Folder relative to cwd where files will be backed up or restored" default:"."`
-
-		BackupTag string `short:"t" long:"backup-tag" description:"Tag for the backup, depending on activated plugins like 'history'" default:"linux_ubuntu1604_gcc4_nohistory"`
-
-		BeforeTimestamp int64 `short:"b" long:"before-timestamp" description:"closest timestamp (unix format) before which we want the latest restorable backup" default:"now"`
-		Args            struct {
-			Command string
-		} `positional-args:"yes" required:"yes"`
-	}
 )
 
-func downloadFileFromChunks(fm Filemeta) {
+func downloadFileFromChunks(fm Filemeta, localFolder string) error {
 	log.Printf("Restoring file %s with size %d from snapshot dated %s\n", fm.FileName, fm.TotalSize, fm.Date)
 
-	f, err := os.OpenFile(fm.FileName, os.O_RDWR|os.O_CREATE, 0644)
+	filePath := filepath.Join(localFolder, fm.FileName)
+
+	err := os.MkdirAll(path.Dir(filePath), 0755)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err = f.Truncate(fm.TotalSize); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer f.Close()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	eg := llerrgroup.New(10)
@@ -69,10 +60,10 @@ func downloadFileFromChunks(fm Filemeta) {
 		}
 
 		if i.IsEmpty {
-			fmt.Println("...Punching a hole through")
+			log.Println("...Punching a hole through")
 			err := wipeChunk(f, i.Start, i.End-i.Start+1)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 			continue
 		}
@@ -102,8 +93,10 @@ func downloadFileFromChunks(fm Filemeta) {
 
 	}
 	if err := eg.Wait(); err != nil {
-		log.Fatalln(err)
+		return err
 	}
+
+	return nil
 }
 
 func uploadFileToChunks(
@@ -178,7 +171,7 @@ func uploadFileToChunks(
 
 }
 
-func restoreFromBackup() error {
+func RestoreFromBackup(opts *PitreosOptions) error {
 	err := configureStorage(opts.BucketName)
 	if err != nil {
 		return err
@@ -186,22 +179,25 @@ func restoreFromBackup() error {
 	if opts.BeforeTimestamp == 0 {
 		opts.BeforeTimestamp = time.Now().Unix()
 	}
-
 	wantedBackupYAML, err := findAvailableBackup(opts.BeforeTimestamp, opts.BucketFolder, opts.BackupTag)
 	if err != nil {
 		return err
 	}
 
 	bm := downloadBackupMetaYamlFile(wantedBackupYAML)
+	fmt.Printf("%+v\n", bm)
 	for _, y := range bm.MetadataFiles {
 		fm := downloadYamlFile(getStorageFilePath(y))
-		downloadFileFromChunks(*fm)
+		err := downloadFileFromChunks(*fm, opts.LocalFolder)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func generateBackup() error {
+func GenerateBackup(opts *PitreosOptions) error {
 	err := configureStorage(opts.BucketName)
 	if err != nil {
 		return err
@@ -283,29 +279,4 @@ func uploadYamlFile(fm Filemeta, filePath string) (url string) {
 	}
 
 	return
-}
-
-func main() {
-
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	switch opts.Args.Command {
-	case "backup":
-		err := generateBackup()
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-	case "restore":
-		err := restoreFromBackup()
-		if err != nil {
-			log.Fatalln(err)
-		}
-	default:
-		log.Fatalln("Unknown command", opts.Args.Command)
-	}
-
 }

@@ -1,4 +1,4 @@
-package main
+package pitreos
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -58,7 +59,8 @@ func findAvailableBackup(
 		if objAttrs == nil {
 			return "", fmt.Errorf("Error, probably missing permissions...")
 		}
-		if strings.HasSuffix(objAttrs.Name, "index.yaml") {
+		if strings.HasSuffix(objAttrs.Name, "index.yaml") && filepath.Dir(filepath.Dir(objAttrs.Name)) == prefix {
+			fmt.Println("found name is " + objAttrs.Name)
 			thisTimestamp := strings.TrimSuffix(strings.TrimPrefix(objAttrs.Name, prefix+"/"), "/index.yaml")
 
 			if thisTimestamp < timeString { //valid timestamp
@@ -74,6 +76,7 @@ func findAvailableBackup(
 		err = fmt.Errorf("cannot find any")
 	}
 
+	fmt.Println("valid file path: " + latestValidFilepath)
 	return
 }
 
