@@ -1,12 +1,23 @@
 # pitreos: Point in Time recovery for EOS
 _Pronounced like "Patriots"_
 
-# How to try out this wonderful copy/paste from stackoverflow:
+# How to use ?
 
-1. Create a sparse file: truncate -s 512M file.img
-2. run "go run splitfile.go"
+## compile and help
+cd pitreos-cli && go install -v
+pitreos-cli --help
 
+## backup from nodeos
 
+/pitreos-cli --bucket-name my-super-nodeos  --local-folder=nodeos-data --bucket-folder=pitreos --backup-tag=linux_ubuntu1604_gcc4_nohistory backup
+
+## restore with given timestamp
+
+/pitreos-cli --bucket-name my-super-nodeos  --local-folder=nodeos-data --bucket-folder=pitreos --backup-tag=linux_ubuntu1604_gcc4_nohistory --before-timestamp=$(date -d 'yesterday' +%s)" restore
+
+# Optimizations TODO
+
+make SHA1 computing parallel
 
 # Proposal / discussion
 
