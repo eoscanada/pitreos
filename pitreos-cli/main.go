@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
-
 	"github.com/eoscanada/pitreos"
 	flags "github.com/jessevdk/go-flags"
+	"log"
+	"os"
 )
 
 func main() {
@@ -12,7 +12,7 @@ func main() {
 	var opts pitreos.PitreosOptions
 	_, err := flags.Parse(&opts)
 	if err != nil {
-		log.Fatalln(err)
+		os.Exit(1)
 	}
 
 	switch opts.Args.Command {
