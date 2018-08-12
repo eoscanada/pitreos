@@ -95,7 +95,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
-			return fmt.Errorf("Got an error in thread management. Stopping.")
+			return nil, fmt.Errorf("Got an error in thread management. Stopping.")
 		}
 
 		partnum := i
