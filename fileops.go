@@ -83,6 +83,7 @@ func (f *FileOps) writeChunkToFile(offset int64, s []byte) error {
 
 // isRangeInSparseExtent reports whether data is PRESENT in that range.
 func (f *FileOps) hasDataInRange(startIndex, size int64) bool {
+
 	endIndex := startIndex + size - 1
 
 	if f.extentsLoaded == false {

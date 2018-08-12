@@ -18,6 +18,9 @@ func (p *PITR) RestoreFromBackup() error {
 	if err := p.setupStorage(); err != nil {
 		return err
 	}
+	if err := p.setupCaching(); err != nil {
+		return err
+	}
 
 	if p.Options.BeforeTimestamp == 0 {
 		p.Options.BeforeTimestamp = time.Now().Unix()
@@ -52,7 +55,6 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	log.Println("")
 	log.Printf("Restoring file %q with size %s from snapshot dated %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)), fm.Date)
 	log.Println("")
-
 	filePath := filepath.Join(localFolder, fm.FileName)
 
 	err := os.MkdirAll(path.Dir(filePath), 0755)
@@ -118,10 +120,17 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 
 			blobStart := chunkMeta.Start
 			expectedSum := chunkMeta.ContentSHA1
-			newData, err := p.readFromGoogleStorage(blobPath)
-			if err != nil {
-				log.Printf("Something went wrong reading, error = %s\n", err)
-				return err
+
+			//try from cache first
+			newData, err := p.cachingEngine.getChunkFromCache(chunkMeta.ContentSHA1)
+			if err == nil {
+				log.Printf("Got it from local cache. Great!")
+			} else {
+				newData, err = p.readFromGoogleStorage(blobPath)
+				if err != nil {
+					log.Printf("Something went wrong reading, error = %s\n", err)
+					return err
+				}
 			}
 
 			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))

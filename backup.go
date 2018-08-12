@@ -18,6 +18,10 @@ func (p *PITR) GenerateBackup() error {
 		return err
 	}
 
+	if err := p.setupCaching(); err != nil {
+		return err
+	}
+
 	now := time.Now()
 	bm := BackupMeta{
 		Date:        now,
@@ -91,17 +95,18 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
-			break // short-circuit the loop if we got an error
+			return fmt.Errorf("Got an error in thread management. Stopping.")
 		}
 
+		partnum := i
 		eg.Go(func() error {
-			log.Printf("Processing part %d of %d ###\n", i, totalPartsNum)
+			log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
 
-			partSize := int64(math.Min(float64(p.chunkSize), float64(fileMeta.TotalSize-int64(i*p.chunkSize))))
+			partSize := int64(math.Min(float64(p.chunkSize), float64(fileMeta.TotalSize-int64(partnum*p.chunkSize))))
 
 			chunkMeta := &ChunkMeta{
-				Start: i * p.chunkSize,
-				End:   i*p.chunkSize + partSize - 1,
+				Start: partnum * p.chunkSize,
+				End:   partnum*p.chunkSize + partSize - 1,
 			}
 
 			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
@@ -113,8 +118,13 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 
 			if !blockIsEmpty {
 				chunkMeta.ContentSHA1 = fmt.Sprintf("%x", sha1.Sum(partBuffer))
-				fileName := path.Join(bucketFolder, chunkMeta.ContentSHA1+".blob")
 
+				err := p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, partBuffer)
+				if err != nil {
+					return fmt.Errorf("Error in writing cache file: %s", err.Error())
+				}
+
+				fileName := path.Join(bucketFolder, chunkMeta.ContentSHA1+".blob")
 				chunkMeta.URL = p.getStorageFileURL(fileName)
 				exists := p.checkFileExistsOnGoogleStorage(fileName)
 				if exists {

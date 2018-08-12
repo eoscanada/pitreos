@@ -10,6 +10,7 @@ type PITR struct {
 	Options   *PitreosOptions
 
 	storageBucket *storage.BucketHandle
+	cachingEngine *LocalCache
 }
 
 func New(opts *PitreosOptions) *PITR {
