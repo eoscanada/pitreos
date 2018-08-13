@@ -119,10 +119,8 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 			if !blockIsEmpty {
 				chunkMeta.ContentSHA1 = fmt.Sprintf("%x", sha1.Sum(partBuffer))
 
-				err := p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, partBuffer)
-				if err != nil {
-					return fmt.Errorf("Error in writing cache file: %s", err.Error())
-				}
+				// don't fail if caching disabled
+				_ = p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, partBuffer)
 
 				fileName := path.Join(bucketFolder, chunkMeta.ContentSHA1+".blob")
 				chunkMeta.URL = p.getStorageFileURL(fileName)

@@ -131,11 +131,8 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 					log.Printf("Something went wrong reading, error = %s\n", err)
 					return err
 				}
-				//save to cache
-				err := p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, newData)
-				if err != nil {
-					return fmt.Errorf("Error in writing cache file: %s", err.Error())
-				}
+				//save to cache if possible
+				_ = p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, newData)
 
 			}
 
