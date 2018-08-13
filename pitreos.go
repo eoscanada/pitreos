@@ -16,7 +16,7 @@ type PITR struct {
 func New(opts *PitreosOptions) *PITR {
 	return &PITR{
 		chunkSize: 50 * 1024 * 1024,
-		threads:   1,
+		threads:   24,
 		Options:   opts,
 	}
 }
