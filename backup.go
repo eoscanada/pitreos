@@ -81,7 +81,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	// calculate total number of parts the file will be chunked into
 	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
 
-	log.Printf("Splitting to %d pieces.\n", totalPartsNum)
+	log.Printf("Splitting %s to %d pieces.\n", fileName, totalPartsNum)
 
 	done := make(chan bool)
 	chunkCh := make(chan *ChunkMeta, 1000)
