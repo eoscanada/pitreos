@@ -95,7 +95,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
-			return nil, fmt.Errorf("Got an error in thread management. Stopping.")
+			return nil, fmt.Errorf("One of the threads failed. Stopping.")
 		}
 
 		partnum := i
@@ -126,9 +126,24 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 				chunkMeta.URL = p.getStorageFileURL(fileName)
 				exists := p.checkFileExistsOnGoogleStorage(fileName)
 				if exists {
-					log.Printf("File already exists: %s\n", fileName)
+					log.Printf("File already exists: %s", fileName)
 				} else {
-					_, err := p.writeToGoogleStorage(fileName, partBuffer, true)
+					log.Printf("Sending file to google storage: %s", fileName)
+					writeChan := make(chan error, 1)
+					go func() {
+						_, err := p.writeToGoogleStorage(fileName, partBuffer, true)
+						writeChan <- err
+					}()
+					select {
+					case err := <-writeChan:
+						if err != nil {
+							return err
+						}
+
+					case <-time.After(3 * time.Second):
+						return fmt.Errorf("Upload of %s to storage timed out", fileName)
+					}
+
 					if err != nil {
 						return err
 					}
