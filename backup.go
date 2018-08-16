@@ -140,7 +140,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 							return err
 						}
 
-					case <-time.After(3 * time.Second):
+					case <-time.After(300 * time.Second):
 						return fmt.Errorf("Upload of %s to storage timed out", fileName)
 					}
 
