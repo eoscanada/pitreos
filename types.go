@@ -22,11 +22,12 @@ type FileMeta struct {
 }
 
 type BackupMeta struct {
-	Kind          string    `yaml:"kind"`
-	MetaVersion   string    `yaml:"metaVersion"`
-	Tag           string    `yaml:"tag"`
-	Date          time.Time `yaml:"date"`
-	MetadataFiles []string  `yaml:"metadataFiles"`
+	Kind          string                 `yaml:"kind"`
+	MetaVersion   string                 `yaml:"metaVersion"`
+	Tag           string                 `yaml:"tag"`
+	Date          time.Time              `yaml:"date"`
+	MetadataFiles []string               `yaml:"metadataFiles"`
+	Details       map[string]interface{} `yaml:"details"`
 }
 
 type PitreosOptions struct {

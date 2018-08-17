@@ -13,7 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-func (p *PITR) GenerateBackup() error {
+func (p *PITR) GenerateBackup(details map[string]interface{}) error {
 	if err := p.setupStorage(); err != nil {
 		return err
 	}
@@ -28,6 +28,7 @@ func (p *PITR) GenerateBackup() error {
 		Tag:         p.Options.BackupTag,
 		Kind:        "filesMap",
 		MetaVersion: "v1",
+		Details:     details,
 	}
 	nowString := fmt.Sprintf(time.Now().UTC().Format(time.RFC3339))
 
