@@ -20,7 +20,7 @@ func main() {
 
 	switch opts.Args.Command {
 	case "backup":
-		err := pitre.GenerateBackup()
+		err := pitre.GenerateBackup(nil)
 		if err != nil {
 			log.Fatalln(err)
 		}
