@@ -13,38 +13,44 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-func (p *PITR) GenerateBackup(details map[string]interface{}) error {
-	if err := p.setupStorage(); err != nil {
+func (p *PITR) GenerateBackup(source string, dest string, metadata map[string]interface{}) error {
+	if !isGSURL(dest) {
+		return fmt.Errorf("Backup to local file not implemented.")
+	}
+	bucketName, gsPath, err := splitGSURL(dest)
+	if err != nil {
 		return err
 	}
-
+	if err := p.setupStorageClient(); err != nil {
+		return err
+	}
 	if err := p.setupCaching(); err != nil {
 		return err
 	}
 
 	now := time.Now()
+	nowString := now.UTC().Format(time.RFC3339)
 	bm := BackupMeta{
 		Date:        now,
-		Tag:         p.Options.BackupTag,
 		Kind:        "filesMap",
-		MetaVersion: "v1",
-		Details:     details,
+		MetaVersion: "v2",
+		Details:     metadata,
 	}
-	nowString := fmt.Sprintf(time.Now().UTC().Format(time.RFC3339))
 
-	dirs, err := getDirFiles(p.Options.LocalFolder)
+	dirs, err := getDirFiles(source)
 	for _, filePath := range dirs {
-		relName, err := filepath.Rel(p.Options.LocalFolder, filePath)
+		relName, err := filepath.Rel(source, filePath)
 		if err != nil {
 			return err
 		}
 
-		fileMeta, err := p.uploadFileToChunks(filePath, relName, path.Join(p.Options.BucketFolder, "blobs"), now)
+		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, bucketName, gsPath, now)
 		if err != nil {
 			return fmt.Errorf("upload file to chunks: %s", err)
 		}
 
-		yamlURL, err := p.uploadYamlFile(fileMeta, path.Join(p.Options.BucketFolder, p.Options.BackupTag, nowString, "yaml", fileMeta.FileName+".yaml"))
+		yamlURL := getGSURL(bucketName, path.Join(gsPath, nowString, "yaml", fileMeta.FileName+".yaml"))
+		err = p.uploadYamlFile(fileMeta, yamlURL)
 		if err != nil {
 			return fmt.Errorf("upload yaml: %s", err)
 		}
@@ -52,7 +58,8 @@ func (p *PITR) GenerateBackup(details map[string]interface{}) error {
 		bm.MetadataFiles = append(bm.MetadataFiles, yamlURL)
 	}
 
-	yamlURL, err := p.uploadBackupMetaYamlFile(bm, path.Join(p.Options.BucketFolder, p.Options.BackupTag, nowString, "index.yaml"))
+	yamlURL := getGSURL(bucketName, path.Join(gsPath, nowString, "index.yaml"))
+	err = p.uploadBackupMetaYamlFile(bm, yamlURL)
 	if err != nil {
 		return fmt.Errorf("upload backup meta: %s", err)
 	}
@@ -62,9 +69,8 @@ func (p *PITR) GenerateBackup(details map[string]interface{}) error {
 	return nil
 }
 
-func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, timestamp time.Time) (*FileMeta, error) {
-
-	f := NewFileOps(filePath, false)
+func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath string, timestamp time.Time) (*FileMeta, error) {
+	f := NewFileOps(localFile, false)
 	if err := f.Open(); err != nil {
 		return nil, fmt.Errorf("open file: %s", err)
 	}
@@ -74,16 +80,14 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 	fileMeta := &FileMeta{
 		Kind:        "blobMap",
 		MetaVersion: "v1",
-		FileName:    fileName,
+		FileName:    relFileName,
 		TotalSize:   fileInfo.Size(),
 		Date:        timestamp,
 	}
-
-	// calculate total number of parts the file will be chunked into
 	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
+	log.Printf("Splitting %s to %d pieces.\n", relFileName, totalPartsNum)
 
-	log.Printf("Splitting %s to %d pieces.\n", fileName, totalPartsNum)
-
+	// setup chunk metadata reader to populate fileMeta
 	done := make(chan bool)
 	chunkCh := make(chan *ChunkMeta, 1000)
 	go func() {
@@ -93,6 +97,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 		done <- true
 	}()
 
+	// iterate over chunks
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
@@ -123,8 +128,8 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 				// don't fail if caching disabled
 				_ = p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, partBuffer)
 
-				fileName := path.Join(bucketFolder, chunkMeta.ContentSHA1+".blob")
-				chunkMeta.URL = p.getStorageFileURL(fileName)
+				fileName := path.Join(gsPath, "blobs", chunkMeta.ContentSHA1+".blob")
+				chunkMeta.URL = getGSURL(bucketName, fileName)
 				exists := p.checkFileExistsOnGoogleStorage(fileName)
 				if exists {
 					log.Printf("File already exists: %s", fileName)
@@ -132,7 +137,7 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 					log.Printf("Sending file to google storage: %s", fileName)
 					writeChan := make(chan error, 1)
 					go func() {
-						_, err := p.writeToGoogleStorage(fileName, partBuffer, true)
+						err := p.writeToGoogleStorage(chunkMeta.URL, partBuffer, true)
 						writeChan <- err
 					}()
 					select {
@@ -171,18 +176,18 @@ func (p *PITR) uploadFileToChunks(filePath, fileName, bucketFolder string, times
 
 }
 
-func (p *PITR) uploadBackupMetaYamlFile(bm BackupMeta, filePath string) (url string, err error) {
+func (p *PITR) uploadBackupMetaYamlFile(bm BackupMeta, fileURL string) error {
 	d, err := yaml.Marshal(&bm)
 	if err != nil {
-		return "", fmt.Errorf("yaml marshal: %s", err)
+		return fmt.Errorf("yaml marshal: %s", err)
 	}
-	return p.writeToGoogleStorage(filePath, d, false)
+	return p.writeToGoogleStorage(fileURL, d, false)
 }
 
-func (p *PITR) uploadYamlFile(fileMeta *FileMeta, filePath string) (url string, err error) {
+func (p *PITR) uploadYamlFile(fileMeta *FileMeta, fileURL string) error {
 	d, err := yaml.Marshal(&fileMeta)
 	if err != nil {
-		return "", fmt.Errorf("yaml marshal: %s", err)
+		return fmt.Errorf("yaml marshal: %s", err)
 	}
-	return p.writeToGoogleStorage(filePath, d, false)
+	return p.writeToGoogleStorage(fileURL, d, false)
 }

@@ -18,3 +18,5 @@
 *.img
 *.yaml
 pitreos
+
+~*.swp

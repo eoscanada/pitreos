@@ -1,4 +1,4 @@
-# pitreos: Point in Time recovery for EOS
+# pitreos: Point in Time Recovery Tool by EOS Canada
 _Pronounced like "Patriots"_
 
 # How to use ?

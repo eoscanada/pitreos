@@ -14,22 +14,22 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-func (p *PITR) RestoreFromBackup() error {
-	if err := p.setupStorage(); err != nil {
+func (p *PITR) RestoreFromBackup(source, dest string, targetTimestamp time.Time) error {
+	if !isGSURL(source) {
+		return fmt.Errorf("Backup to/Restore from local file not implemented.")
+	}
+	if err := p.setupStorageClient(); err != nil {
 		return err
 	}
 	if err := p.setupCaching(); err != nil {
 		return err
 	}
 
-	if p.Options.BeforeTimestamp == 0 {
-		p.Options.BeforeTimestamp = time.Now().Unix()
-	}
-
-	wantedBackupYAML, err := p.findAvailableBackup()
+	wantedBackupYAML, err := p.findAvailableBackup(source, targetTimestamp)
 	if err != nil {
 		return err
 	}
+	log.Printf("Found valid backup definition at %s\n", wantedBackupYAML)
 
 	var bm *BackupMeta
 	if err := p.downloadYaml(wantedBackupYAML, &bm); err != nil {
@@ -38,11 +38,11 @@ func (p *PITR) RestoreFromBackup() error {
 
 	for _, y := range bm.MetadataFiles {
 		var fm *FileMeta
-		if err := p.downloadYaml(p.getStorageFilePath(y), &fm); err != nil {
+		if err := p.downloadYaml(y, &fm); err != nil {
 			return err
 		}
 
-		err := p.downloadFileFromChunks(fm, p.Options.LocalFolder)
+		err := p.downloadFileFromChunks(fm, dest)
 		if err != nil {
 			return err
 		}
@@ -52,9 +52,7 @@ func (p *PITR) RestoreFromBackup() error {
 }
 
 func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
-	log.Println("")
 	log.Printf("Restoring file %q with size %s from snapshot dated %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)), fm.Date)
-	log.Println("")
 	filePath := filepath.Join(localFolder, fm.FileName)
 
 	err := os.MkdirAll(path.Dir(filePath), 0755)
@@ -116,8 +114,6 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 				log.Printf("Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
 			}
 
-			blobPath := p.getStorageFilePath(chunkMeta.URL)
-
 			blobStart := chunkMeta.Start
 			expectedSum := chunkMeta.ContentSHA1
 
@@ -126,7 +122,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 			if err == nil {
 				log.Printf("Got it from local cache. Great!")
 			} else {
-				newData, err = p.readFromGoogleStorage(blobPath)
+				newData, err = p.readFromGoogleStorage(chunkMeta.URL)
 				if err != nil {
 					log.Printf("Something went wrong reading, error = %s\n", err)
 					return err
@@ -152,8 +148,8 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	return nil
 }
 
-func (p *PITR) downloadYaml(filePath string, obj interface{}) error {
-	y, err := p.readFromGoogleStorage(filePath)
+func (p *PITR) downloadYaml(URL string, obj interface{}) error {
+	y, err := p.readFromGoogleStorage(URL)
 	if err != nil {
 		return err
 	}

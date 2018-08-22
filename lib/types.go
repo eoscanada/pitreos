@@ -45,4 +45,10 @@ type PitreosOptions struct {
 	Args            struct {
 		Command string
 	} `positional-args:"yes" required:"yes"`
+
+	CacheDir               string   // path
+	Caching                bool     // caching enabled or disabled
+	AppendonlyOptimization bool     // optimizations enabled or disabled
+	AppendonlyFiles        []string // list of files to be treated as appendonly
+
 }

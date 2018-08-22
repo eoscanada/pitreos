@@ -2,6 +2,7 @@ package pitreos
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -12,18 +13,19 @@ type LocalCache struct {
 }
 
 func (p *PITR) setupCaching() error {
-	if p.Options.CacheFolder == "" {
+	if !p.Caching || p.CacheDir == "" {
 		p.cachingEngine = NewLocalCache(false, "")
 		return nil
 	}
 
 	//prepare caching folder
-	err := os.MkdirAll(p.Options.CacheFolder, 0755)
+	err := os.MkdirAll(p.CacheDir, 0755)
 	if err != nil {
 		return err
 	}
 
-	p.cachingEngine = NewLocalCache(true, p.Options.CacheFolder)
+	log.Printf("Setting up local caching in folder %s\n", p.CacheDir)
+	p.cachingEngine = NewLocalCache(true, p.CacheDir)
 	return nil
 }
 
