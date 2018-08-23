@@ -130,11 +130,11 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 
 				fileName := path.Join(gsPath, "blobs", chunkMeta.ContentSHA1+".blob")
 				chunkMeta.URL = getGSURL(bucketName, fileName)
-				exists := p.checkFileExistsOnGoogleStorage(fileName)
+				exists := p.checkFileExistsOnGoogleStorage(chunkMeta.URL)
 				if exists {
-					log.Printf("File already exists: %s", fileName)
+					log.Printf("File already exists: %s", chunkMeta.URL)
 				} else {
-					log.Printf("Sending file to google storage: %s", fileName)
+					log.Printf("Sending file to google storage: %s", chunkMeta.URL)
 					writeChan := make(chan error, 1)
 					go func() {
 						err := p.writeToGoogleStorage(chunkMeta.URL, partBuffer, true)
