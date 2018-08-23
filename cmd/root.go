@@ -53,7 +53,7 @@ func init() {
 
 	RootCmd.PersistentFlags().StringVar(&cacheDir, "cache-dir", "", "Cache directory (default is $HOME/.pitreos/cache)")
 	RootCmd.PersistentFlags().BoolVarP(&caching, "enable-caching", "c", false, "Keep/use a copy of every block file sent")
-	RootCmd.PersistentFlags().BoolVar(&appendonlyOptimization, "enable-appendonly-optimizaition", true, "Use the optimizations on 'appendonly-files'")
+	RootCmd.PersistentFlags().BoolVar(&appendonlyOptimization, "enable-appendonly-optimization", true, "Use the optimizations on 'appendonly-files'")
 	RootCmd.PersistentFlags().StringSliceVarP(&appendonlyFiles, "appendonly-files", "a", []string{"blocks/blocks.log"}, "Files on which we use appendonly optimizations (flag can be used many times)")
 
 }
