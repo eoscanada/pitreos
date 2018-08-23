@@ -66,14 +66,34 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	}
 	defer f.Close()
 
+	if p.AppendonlyOptimization && stringarrayContains(p.AppendonlyFiles, fm.FileName) {
+		f.isAppendOnly = true
+	}
+	fstats, err := f.file.Stat()
+	if err != nil {
+		return err
+	}
+	f.originalSize = fstats.Size()
+
 	if err = f.Truncate(fm.TotalSize); err != nil {
 		return err
 	}
+	if f.isAppendOnly && f.originalSize >= fm.TotalSize {
+		log.Printf("- File %s treated as 'appendonly'. Got truncated to %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)))
+		return nil
+	}
 
+	skippedChunks := 0
+	emptyChunks := 0
+	correctChunks := 0
 	eg := llerrgroup.New(p.threads)
 	numChunks := len(fm.Chunks)
 	for n, chunkMeta := range fm.Chunks {
 
+		if f.isAppendOnly && f.originalSize > chunkMeta.End {
+			skippedChunks += 1
+			continue
+		}
 		if eg.Stop() {
 			return fmt.Errorf("Got an error in thread management. Stopping.")
 		}
@@ -88,12 +108,12 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 			}
 
 			if localChunkEmpty && chunkMeta.IsEmpty {
-				log.Printf("Chunk %d/%d has empty contents already", n+1, numChunks)
+				emptyChunks += 1
 				return nil
 			}
 
 			if !localChunkEmpty && chunkMeta.IsEmpty {
-				log.Printf("Chunk %d/%d punching a hole (empty chunk)", n+1, numChunks)
+				log.Printf("- Chunk %d/%d punching a hole (empty chunk)", n+1, numChunks)
 				err := f.wipeChunk(chunkMeta.Start, chunkMeta.End-chunkMeta.Start+1)
 				if err != nil {
 					return err
@@ -103,15 +123,15 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("Chunk %d/%d empty, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
+				log.Printf("- Chunk %d/%d empty, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
 			} else {
 				readSHA1Sum := sha1.Sum(partBuffer)
 				shasum := fmt.Sprintf("%x", readSHA1Sum)
 				if shasum == chunkMeta.ContentSHA1 {
-					log.Printf("Chunk %d/%d has correct contents already", n+1, numChunks)
+					correctChunks += 1
 					return nil
 				}
-				log.Printf("Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
+				log.Printf("- Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
 			}
 
 			blobStart := chunkMeta.Start
@@ -120,7 +140,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 			//try from cache first
 			newData, err := p.cachingEngine.getChunkFromCache(chunkMeta.ContentSHA1)
 			if err == nil {
-				log.Printf("Got it from local cache. Great!")
+				log.Printf("- Got it from local cache. Great!")
 			} else {
 				newData, err = p.readFromGoogleStorage(chunkMeta.URL)
 				if err != nil {
@@ -145,6 +165,15 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 		return err
 	}
 
+	if skippedChunks > 0 {
+		log.Printf("- %d/%d chunks were not verified on appendonly file %s. use --enable-appendonly-optimization=false to force verification\n", skippedChunks, numChunks, fm.FileName)
+	}
+	if correctChunks > 0 {
+		log.Printf("- %d/%d chunks were already correct. on file %s\n", correctChunks, numChunks, fm.FileName)
+	}
+	if emptyChunks > 0 {
+		log.Printf("- %d/%d chunks were left empty. on file %s\n", emptyChunks, numChunks, fm.FileName)
+	}
 	return nil
 }
 

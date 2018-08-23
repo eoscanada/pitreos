@@ -11,10 +11,12 @@ import (
 )
 
 type FileOps struct {
-	filePath  string
-	readWrite bool
-	file      *os.File
-	lock      sync.Mutex
+	filePath     string
+	readWrite    bool
+	file         *os.File
+	lock         sync.Mutex
+	isAppendOnly bool
+	originalSize int64
 
 	extentsLoaded bool
 	extents       []fibmap.Extent
@@ -159,4 +161,13 @@ func getDirFiles(directory string) (fileNames []string, err error) {
 		return nil
 	})
 	return
+}
+
+func stringarrayContains(a []string, x string) bool {
+	for _, n := range a {
+		if x == n {
+			return true
+		}
+	}
+	return false
 }
