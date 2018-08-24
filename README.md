@@ -4,6 +4,10 @@ _Pronounced like "Patriots"_
 Backup and restore tool optimized for large files that don't change much
 Perfect for EOS state and block.log, or virtual machine images
 
+<p align="center">
+    <img src="https://eoscanada.github.io/terminal/pitreos_term.svg">
+</p>
+
 # Supported platforms
 
 * Linux
