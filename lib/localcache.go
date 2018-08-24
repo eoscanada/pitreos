@@ -36,23 +36,23 @@ func NewLocalCache(enabled bool, directory string) *LocalCache {
 	}
 }
 
-func (c *LocalCache) getChunkFromCache(sha1sum string) (data []byte, err error) {
+func (c *LocalCache) getChunkFromCache(sha1sum string) (data []byte, filename string, err error) {
 	if !c.enabled {
-		return data, fmt.Errorf("Cache disabled")
+		return data, "", fmt.Errorf("Cache disabled")
 	}
 
-	filePath := filepath.Join(c.directory, fmt.Sprintf("%s.blob", sha1sum))
+	filename = filepath.Join(c.directory, fmt.Sprintf("%s.blob", sha1sum))
 
-	info, err := os.Stat(filePath)
+	info, err := os.Stat(filename)
 	if err != nil {
-		return data, err
+		return data, filename, err
 	}
 
 	data = make([]byte, info.Size())
 
-	f, err := os.Open(filePath)
+	f, err := os.Open(filename)
 	if err != nil {
-		return data, fmt.Errorf("Open file error: %s", err)
+		return data, filename, fmt.Errorf("Open file error: %s", err)
 	}
 	_, err = f.Read(data)
 

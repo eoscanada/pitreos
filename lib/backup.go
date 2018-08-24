@@ -97,6 +97,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 		done <- true
 	}()
 
+	emptyChunks := 0
 	// iterate over chunks
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
@@ -106,7 +107,6 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 
 		partnum := i
 		eg.Go(func() error {
-			log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
 
 			partSize := int64(math.Min(float64(p.chunkSize), float64(fileMeta.TotalSize-int64(partnum*p.chunkSize))))
 
@@ -121,8 +121,14 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 			}
 
 			chunkMeta.IsEmpty = blockIsEmpty
+			if blockIsEmpty {
+				counterLock.Lock()
+				emptyChunks += 1
+				counterLock.Unlock()
+			}
 
 			if !blockIsEmpty {
+				log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
 				chunkMeta.ContentSHA1 = fmt.Sprintf("%x", sha1.Sum(partBuffer))
 
 				// don't fail if caching disabled
@@ -169,6 +175,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 		log.Fatalln(err)
 	}
 
+	log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
 	close(chunkCh)
 	<-done
 

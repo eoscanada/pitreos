@@ -7,12 +7,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/abourget/llerrgroup"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/ghodss/yaml"
 )
+
+var counterLock sync.Mutex
 
 func (p *PITR) RestoreFromBackup(source, dest string, targetTimestamp time.Time) error {
 	if !isGSURL(source) {
@@ -91,7 +94,9 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	for n, chunkMeta := range fm.Chunks {
 
 		if f.isAppendOnly && f.originalSize > chunkMeta.End {
+			counterLock.Lock()
 			skippedChunks += 1
+			counterLock.Unlock()
 			continue
 		}
 		if eg.Stop() {
@@ -108,7 +113,9 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 			}
 
 			if localChunkEmpty && chunkMeta.IsEmpty {
+				counterLock.Lock()
 				emptyChunks += 1
+				counterLock.Unlock()
 				return nil
 			}
 
@@ -123,12 +130,14 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("- Chunk %d/%d empty, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
+				log.Printf("- Chunk %d/%d invalid, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
 			} else {
 				readSHA1Sum := sha1.Sum(partBuffer)
 				shasum := fmt.Sprintf("%x", readSHA1Sum)
 				if shasum == chunkMeta.ContentSHA1 {
+					counterLock.Lock()
 					correctChunks += 1
+					counterLock.Unlock()
 					return nil
 				}
 				log.Printf("- Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
@@ -138,9 +147,9 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 			expectedSum := chunkMeta.ContentSHA1
 
 			//try from cache first
-			newData, err := p.cachingEngine.getChunkFromCache(chunkMeta.ContentSHA1)
+			newData, filename, err := p.cachingEngine.getChunkFromCache(chunkMeta.ContentSHA1)
 			if err == nil {
-				log.Printf("- Got it from local cache. Great!")
+				log.Printf("- Got it from local cache file: %s", filename)
 			} else {
 				newData, err = p.readFromGoogleStorage(chunkMeta.URL)
 				if err != nil {
