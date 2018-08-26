@@ -14,11 +14,8 @@ var backupCmd = &cobra.Command{
 	Use:   "backup {SOURCE} {DESTINATION}",
 	Short: "Backs up your files differentially",
 	Long:  `Backs up your files by slicing them into chunks and comparing their hashes with those present at the destination. This approach is optimized for large files`,
+	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 2 {
-			fmt.Println("This command requires two arguments: SOURCE and DESTINATION")
-			os.Exit(1)
-		}
 
 		var metadata map[string]interface{}
 		err := json.Unmarshal([]byte(metadataJSON), &metadata)

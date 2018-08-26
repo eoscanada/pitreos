@@ -14,12 +14,9 @@ var timestampString string
 var restoreCmd = &cobra.Command{
 	Use:   "restore {SOURCE} {DESTINATION}",
 	Short: "Restores your files to a specified point in time (default: latest available)",
+	Args:  cobra.ExactArgs(2),
 	Long:  "Restores your files to the closest available backup before the requested timestamp (default: now) by comparing existing chunks of data in your files and downloading only the necessary data. This is optimized for large files.",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 2 {
-			fmt.Println("This command requires two arguments: SOURCE and DESTINATION")
-			os.Exit(1)
-		}
 
 		pitr := getPITR()
 		t, err := parseUnixTimestamp(timestampString)
