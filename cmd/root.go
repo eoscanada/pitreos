@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	Version   = "No Version Provided"
+	Version   = "Development version"
 	BuildHash = "No BuildHash Provided"
 	BuildTime = "No BuildTime Provided"
 )
@@ -49,9 +49,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initCaching)
 
-	initBackup()
 	RootCmd.AddCommand(backupCmd)
-	initRestore()
 	RootCmd.AddCommand(restoreCmd)
 	RootCmd.AddCommand(versionCmd)
 

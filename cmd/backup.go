@@ -13,8 +13,10 @@ var metadataJSON string
 var backupCmd = &cobra.Command{
 	Use:   "backup {SOURCE} {DESTINATION}",
 	Short: "Backs up your files differentially",
-	Long:  `Backs up your files by slicing them into chunks and comparing their hashes with those present at the destination. This approach is optimized for large files`,
-	Args:  cobra.ExactArgs(2),
+	Long: `Backs up your files by slicing them into chunks and comparing 
+their hashes with those present at the destination. 
+This approach is optimized for large files`,
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		var metadata map[string]interface{}
@@ -34,6 +36,7 @@ var backupCmd = &cobra.Command{
 	Example: `  pitreos backup /home/nodeos/data gs://mybackups/projectname -c --metadata '{"blocknum": 123456, "version": "1.2.1"}'`,
 }
 
+// adding the "Args" definition (SOURCE / DESTINATION) right below the USAGE definition
 var backupUsageTemplate = `Usage:{{if .Runnable}}
   {{if .HasAvailableFlags}}{{appendIfNotPresent .UseLine "[flags]"}}{{else}}{{.UseLine}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
   {{ .CommandPath}} [command]{{end}}
@@ -56,7 +59,7 @@ Additional help topics:{{range .Commands}}{{if .IsHelpCommand}}
 Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
 `
 
-func initBackup() {
+func init() {
 	backupCmd.Flags().StringVarP(&metadataJSON, "metadata", "m", `{}`, "Additional metadata in JSON format to add to the backup")
 	backupCmd.SetUsageTemplate(backupUsageTemplate)
 }
