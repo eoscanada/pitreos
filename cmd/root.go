@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	pitreos "github.com/eoscanada/pitreos/lib"
 	homedir "github.com/mitchellh/go-homedir"
@@ -17,6 +18,9 @@ var (
 )
 
 var (
+	chunkSizeMiB           int64
+	threads                int
+	transferTimeoutSeconds int
 	cfgFile                string
 	cacheDir               string
 	caching                bool
@@ -51,6 +55,10 @@ func init() {
 	RootCmd.AddCommand(restoreCmd)
 	RootCmd.AddCommand(versionCmd)
 
+	RootCmd.PersistentFlags().Int64Var(&chunkSizeMiB, "chunk-size", 50, "Size in MiB of the chunks when splitting the file")
+	RootCmd.PersistentFlags().IntVar(&threads, "threads", 24, "Number of threads for concurrent hashing and transfer")
+	RootCmd.PersistentFlags().IntVar(&transferTimeoutSeconds, "timeout", 300, "Timeout in seconds for each and every chunk transfer")
+
 	RootCmd.PersistentFlags().StringVar(&cacheDir, "cache-dir", "", "Cache directory (default is $HOME/.pitreos/cache)")
 	RootCmd.PersistentFlags().BoolVarP(&caching, "enable-caching", "c", false, "Keep/use a copy of every block file sent")
 	RootCmd.PersistentFlags().BoolVar(&appendonlyOptimization, "use-appendonly", true, "Use the optimizations on 'appendonly-files'")
@@ -76,5 +84,8 @@ func getPITR() *pitreos.PITR {
 	pitr.Caching = caching
 	pitr.AppendonlyOptimization = appendonlyOptimization
 	pitr.AppendonlyFiles = appendonlyFiles
+	pitr.ChunkSize = 1024 * 1024 * chunkSizeMiB
+	pitr.Threads = threads
+	pitr.TransferTimeout = time.Second * time.Duration(transferTimeoutSeconds)
 	return pitr
 }

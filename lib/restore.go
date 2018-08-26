@@ -89,7 +89,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	skippedChunks := 0
 	emptyChunks := 0
 	correctChunks := 0
-	eg := llerrgroup.New(p.threads)
+	eg := llerrgroup.New(p.Threads)
 	numChunks := len(fm.Chunks)
 	for n, chunkMeta := range fm.Chunks {
 

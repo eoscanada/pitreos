@@ -1,12 +1,15 @@
 package pitreos
 
 import (
+	"time"
+
 	"cloud.google.com/go/storage"
 )
 
 type PITR struct {
-	chunkSize              int64
-	threads                int
+	ChunkSize              int64
+	Threads                int
+	TransferTimeout        time.Duration
 	CacheDir               string
 	Caching                bool
 	AppendonlyOptimization bool
@@ -17,7 +20,8 @@ type PITR struct {
 
 func New() *PITR {
 	return &PITR{
-		chunkSize: 50 * 1024 * 1024,
-		threads:   24,
+		ChunkSize:       50 * 1024 * 1024,
+		Threads:         24,
+		TransferTimeout: 300 * time.Second,
 	}
 }

@@ -84,7 +84,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 		TotalSize:   fileInfo.Size(),
 		Date:        timestamp,
 	}
-	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
+	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.ChunkSize)))
 	log.Printf("Splitting %s to %d pieces.\n", relFileName, totalPartsNum)
 
 	// setup chunk metadata reader to populate fileMeta
@@ -99,7 +99,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 
 	emptyChunks := 0
 	// iterate over chunks
-	eg := llerrgroup.New(p.threads)
+	eg := llerrgroup.New(p.Threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
 			return nil, fmt.Errorf("One of the threads failed. Stopping.")
@@ -108,11 +108,11 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 		partnum := i
 		eg.Go(func() error {
 
-			partSize := int64(math.Min(float64(p.chunkSize), float64(fileMeta.TotalSize-int64(partnum*p.chunkSize))))
+			partSize := int64(math.Min(float64(p.ChunkSize), float64(fileMeta.TotalSize-int64(partnum*p.ChunkSize))))
 
 			chunkMeta := &ChunkMeta{
-				Start: partnum * p.chunkSize,
-				End:   partnum*p.chunkSize + partSize - 1,
+				Start: partnum * p.ChunkSize,
+				End:   partnum*p.ChunkSize + partSize - 1,
 			}
 
 			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
@@ -152,7 +152,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName, bucketName, gsPath s
 							return err
 						}
 
-					case <-time.After(300 * time.Second):
+					case <-time.After(p.TransferTimeout):
 						return fmt.Errorf("Upload of %s to storage timed out", fileName)
 					}
 
