@@ -34,14 +34,14 @@ var backupCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-	Example: `  pitreos backup /home/nodeos/data gs://my-bucket/mainnet/ -c --metadata '{"blocknum": 123456, "version": "1.2.1"}'`,
+	Example: `  pitreos backup /home/nodeos/data gs://mybackups/projectname -c --metadata '{"blocknum": 123456, "version": "1.2.1"}'`,
 }
 
 var backupUsageTemplate = `Usage:{{if .Runnable}}
   {{if .HasAvailableFlags}}{{appendIfNotPresent .UseLine "[flags]"}}{{else}}{{.UseLine}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
   {{ .CommandPath}} [command]{{end}}
   * SOURCE: File path (ex: ../mydata)
-  * DESTINATION: File path (ex: /var/backups) or Google Storage URL (ex: gs://mybucket/pitreos/nohist)
+  * DESTINATION: File path (ex: /var/backups) or Google Storage URL (ex: gs://mybackups/projectname)
   {{if gt .Aliases 0}}
 Aliases:
   {{.NameAndAliases}}

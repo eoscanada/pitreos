@@ -33,7 +33,7 @@ var restoreCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
-	Example: `  pitreos restore gs://my-bucket/mainnet file:///home/nodeos/data -c --timestamp $(date -d "2 hours ago" +%s)`,
+	Example: `  pitreos restore gs://mybackups/projectname file:///home/nodeos/data -c --timestamp $(date -d "2 hours ago" +%s)`,
 }
 
 func parseUnixTimestamp(unixTimeStamp string) (tm time.Time, err error) {
@@ -48,7 +48,7 @@ func parseUnixTimestamp(unixTimeStamp string) (tm time.Time, err error) {
 var restoreUsageTemplate = `Usage:{{if .Runnable}}
   {{if .HasAvailableFlags}}{{appendIfNotPresent .UseLine "[flags]"}}{{else}}{{.UseLine}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
   {{ .CommandPath}} [command]{{end}}
-  * SOURCE: File path (ex: /var/backups) or Google Storage URL (ex: gs://mybucket/pitreos/nohist)
+  * SOURCE: File path (ex: /var/backups) or Google Storage URL (ex: gs://mybackups/projectname)
   * DESTINATION: File path (ex: ../mydata)
   {{if gt .Aliases 0}}
 Aliases:

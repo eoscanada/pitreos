@@ -31,6 +31,7 @@ Perfect for EOS state and block.log, or virtual machine images
 * Unassigned chunks in sparse files are not even read or written to
 * Chunks with data are compressed before transfer
 * Caching can be enabled to keep any downloaded/uploaded chunk locally and quickly restore your files.
+* Chunks are not uploaded again if the same content exist at the same destination (with the same backup path)
 
 # How to install ?
 
@@ -45,11 +46,15 @@ $ make install
 
 ## Backup to Google Storage
 
-`pitreos -c backup . gs://my-bucket/backups`
+`pitreos -c backup --metadata '{"blocknum": 123456, "version": "1.2.1"}' . gs://mybackups/projectname `
+ --> This will send your data chunks under `gs://mybackups/projectname/blobs/`
+ --> your metadata files will be located under `gs://mybackups/projectname/{timestamp}/`
+ --> The backup metadata will contain the provided arbitrary values "blocknum" and "version"
 
 ## Restore with given timestamp
 
-`pitreos -c restore gs://my-bucket/backups . --timestamp $(date -d "10 minutes ago" +%s)`
+`pitreos -c restore gs://mybackups/projectname . --timestamp $(date -d "10 minutes ago" +%s)`
+ --> This will restore your data using the most recent backup *before* 10 minutes ago, based on the timestamps found under `gs://mybackups/projectname/{timestamp}`
 
 ## More examples ##
 
