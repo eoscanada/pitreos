@@ -4,30 +4,29 @@ import (
 	"time"
 )
 
-type ChunkMeta struct {
+type ChunkDef struct {
 	Start       int64  `yaml:"start"`
 	End         int64  `yaml:"end"`
 	IsEmpty     bool   `yaml:"isEmpty"`
 	ContentSHA1 string `yaml:"contentSha1"` // content ?
-	URL         string `yaml:"url"`
 }
 
-type FileMeta struct {
-	Kind        string       `yaml:"kind"`
-	MetaVersion string       `yaml:"metaVersion"`
-	FileName    string       `yaml:"filename"`
-	Date        time.Time    `yaml:"date"`
-	TotalSize   int64        `yaml:"totalSize"`
-	Chunks      []*ChunkMeta `yaml:"chunks"`
+type FileIndex struct {
+	Kind        string      `yaml:"kind"`
+	MetaVersion string      `yaml:"metaVersion"`
+	FileName    string      `yaml:"filename"`
+	Date        time.Time   `yaml:"date"`
+	TotalSize   int64       `yaml:"totalSize"`
+	Chunks      []*ChunkDef `yaml:"chunks"`
 }
 
-type BackupMeta struct {
-	Kind          string                 `yaml:"kind"`
-	MetaVersion   string                 `yaml:"metaVersion"`
-	Tag           string                 `yaml:"tag"`
-	Date          time.Time              `yaml:"date"`
-	MetadataFiles []string               `yaml:"metadataFiles"`
-	Details       map[string]interface{} `yaml:"details"`
+type BackupIndex struct {
+	Kind        string                 `yaml:"kind"`
+	MetaVersion string                 `yaml:"metaVersion"`
+	Tag         string                 `yaml:"tag"`
+	Date        time.Time              `yaml:"date"`
+	Files       []*FileIndex           `yaml:"files"`
+	Details     map[string]interface{} `yaml:"details"`
 }
 
 type PitreosOptions struct {

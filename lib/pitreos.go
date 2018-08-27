@@ -2,26 +2,32 @@ package pitreos
 
 import (
 	"time"
-
-	"cloud.google.com/go/storage"
 )
 
 type PITR struct {
-	ChunkSize              int64
-	Threads                int
-	TransferTimeout        time.Duration
-	CacheDir               string
-	Caching                bool
+	chunkSize              int64
+	threads                int
+	transferTimeout        time.Duration
 	AppendonlyOptimization bool
 	AppendonlyFiles        []string
-	storageClient          *storage.Client
-	cachingEngine          *LocalCache
+
+	cacheStorage Storage
+	storage      Storage
 }
 
-func New() *PITR {
+func NewDefaultPITR(storage Storage) *PITR {
+	return New(50, 24, 300*time.Second, storage)
+}
+func New(chunkSizeMiB int64, threads int, transferTimeout time.Duration, storage Storage) *PITR {
 	return &PITR{
-		ChunkSize:       50 * 1024 * 1024,
-		Threads:         24,
-		TransferTimeout: 300 * time.Second,
+		chunkSize:       chunkSizeMiB * 1024 * 1024,
+		threads:         threads,
+		transferTimeout: transferTimeout,
+		storage:         storage,
 	}
+}
+
+// SetCachingStorage enables caching through the provided Storage object.
+func (p *PITR) SetCacheStorage(storage Storage) {
+	p.cacheStorage = storage
 }

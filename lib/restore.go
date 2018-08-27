@@ -3,12 +3,13 @@ package pitreos
 import (
 	"crypto/sha1"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/abourget/llerrgroup"
 	humanize "github.com/dustin/go-humanize"
@@ -17,35 +18,14 @@ import (
 
 var counterLock sync.Mutex
 
-func (p *PITR) RestoreFromBackup(source, dest string, targetTimestamp time.Time) error {
-	if !isGSURL(source) {
-		return fmt.Errorf("Backup to/Restore from local file not implemented.")
-	}
-	if err := p.setupStorageClient(); err != nil {
-		return err
-	}
-	if err := p.setupCaching(); err != nil {
-		return err
-	}
-
-	wantedBackupYAML, err := p.findAvailableBackup(source, targetTimestamp)
+func (p *PITR) RestoreFromBackup(dest string, backupName string) error {
+	bm, err := p.downloadBackupIndex(backupName)
 	if err != nil {
 		return err
 	}
-	log.Printf("Found valid backup definition at %s\n", wantedBackupYAML)
 
-	var bm *BackupMeta
-	if err := p.downloadYaml(wantedBackupYAML, &bm); err != nil {
-		return err
-	}
-
-	for _, y := range bm.MetadataFiles {
-		var fm *FileMeta
-		if err := p.downloadYaml(y, &fm); err != nil {
-			return err
-		}
-
-		err := p.downloadFileFromChunks(fm, dest)
+	for _, file := range bm.Files {
+		err := p.downloadFileFromChunks(file, dest)
 		if err != nil {
 			return err
 		}
@@ -54,7 +34,7 @@ func (p *PITR) RestoreFromBackup(source, dest string, targetTimestamp time.Time)
 	return nil
 }
 
-func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
+func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	log.Printf("Restoring file %q with size %s from snapshot dated %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)), fm.Date)
 	filePath := filepath.Join(localFolder, fm.FileName)
 
@@ -89,7 +69,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	skippedChunks := 0
 	emptyChunks := 0
 	correctChunks := 0
-	eg := llerrgroup.New(p.Threads)
+	eg := llerrgroup.New(p.threads)
 	numChunks := len(fm.Chunks)
 	for n, chunkMeta := range fm.Chunks {
 
@@ -143,30 +123,49 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 				log.Printf("- Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
 			}
 
-			blobStart := chunkMeta.Start
 			expectedSum := chunkMeta.ContentSHA1
 
 			//try from cache first
-			newData, filename, err := p.cachingEngine.getChunkFromCache(chunkMeta.ContentSHA1)
-			if err == nil {
-				log.Printf("- Got it from local cache file: %s", filename)
-			} else {
-				newData, err = p.readFromGoogleStorage(chunkMeta.URL)
+			var openChunk io.ReadCloser
+			var inCache bool
+			if p.cacheStorage != nil {
+				// Try this first
+				found, err := p.cacheStorage.ChunkExists(chunkMeta.ContentSHA1)
 				if err != nil {
-					log.Printf("Something went wrong reading, error = %s\n", err)
 					return err
 				}
-				//save to cache if possible
-				_ = p.cachingEngine.putChunkToCache(chunkMeta.ContentSHA1, newData)
+				if found {
+					openChunk, err = p.cacheStorage.OpenChunk(chunkMeta.ContentSHA1)
+					inCache = true
+				}
+			}
+			if openChunk == nil {
+				openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA1)
+			}
+			if err != nil {
+				return err
+			}
+			defer openChunk.Close()
 
+			newData, err := ioutil.ReadAll(openChunk)
+			if err != nil {
+				return err
+			}
+
+			if p.cacheStorage != nil && !inCache {
+				err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA1, newData)
+				if err != nil {
+					return err
+				}
 			}
 
 			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
-			log.Printf("- Chunk %d/%d download finished, new sha1: %s\n", n+1, numChunks, newSHA1Sum)
 			if expectedSum != newSHA1Sum {
 				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
 			}
-			return f.writeChunkToFile(int64(blobStart), newData)
+
+			log.Printf("- Chunk %d/%d download finished, new sha1: %s\n", n+1, numChunks, newSHA1Sum)
+			return f.writeChunkToFile(int64(chunkMeta.Start), newData)
 		})
 
 	}
@@ -186,15 +185,21 @@ func (p *PITR) downloadFileFromChunks(fm *FileMeta, localFolder string) error {
 	return nil
 }
 
-func (p *PITR) downloadYaml(URL string, obj interface{}) error {
-	y, err := p.readFromGoogleStorage(URL)
+func (p *PITR) downloadBackupIndex(name string) (out *BackupIndex, err error) {
+	y, err := p.storage.OpenBackupIndex(name)
 	if err != nil {
-		return err
+		return
+	}
+	defer y.Close()
+
+	cnt, err := ioutil.ReadAll(y)
+	if err != nil {
+		return
 	}
 
-	if err = yaml.Unmarshal(y, obj); err != nil {
-		return fmt.Errorf("yaml unmarshal: %s", err)
+	if err = yaml.Unmarshal(cnt, &out); err != nil {
+		return nil, fmt.Errorf("yaml unmarshal: %s", err)
 	}
 
-	return nil
+	return
 }
