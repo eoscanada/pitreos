@@ -15,6 +15,16 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+type Storage interface {
+	ListBackups(limit int, prefix string) ([]string, error)
+	OpenBackup(name string) (io.ReadCloser, error)
+	WriteBackup(name string, content []byte) error
+
+	OpenChunk(hash string) (io.ReadCloser, error)
+	WriteChunk(hash string, content []byte) error
+	ChunkExists(hash string) (bool, error)
+}
+
 func (p *PITR) setupStorageClient() (err error) {
 	ctx := context.Background()
 	p.storageClient, err = storage.NewClient(ctx)
