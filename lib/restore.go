@@ -27,7 +27,7 @@ func (p *PITR) RestoreFromBackup(dest string, backupName string) error {
 	for _, file := range bm.Files {
 		err := p.downloadFileFromChunks(file, dest)
 		if err != nil {
-			return err
+			return fmt.Errorf("retrieve chunk %q: %s", file.FileName, err)
 		}
 	}
 
@@ -40,16 +40,16 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 	err := os.MkdirAll(path.Dir(filePath), 0755)
 	if err != nil {
-		return err
+		return fmt.Errorf("mkdirall: %s", err)
 	}
 
 	f := NewFileOps(filePath, true)
 	if err := f.Open(); err != nil {
-		return err
+		return fmt.Errorf("new fileops: %s", err)
 	}
 	defer f.Close()
 
-	if p.AppendonlyOptimization && stringarrayContains(p.AppendonlyFiles, fm.FileName) {
+	if stringarrayContains(p.AppendonlyFiles, fm.FileName) {
 		f.isAppendOnly = true
 	}
 	fstats, err := f.file.Stat()
@@ -72,15 +72,15 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	eg := llerrgroup.New(p.threads)
 	numChunks := len(fm.Chunks)
 	for n, chunkMeta := range fm.Chunks {
+		if eg.Stop() {
+			break
+		}
 
 		if f.isAppendOnly && f.originalSize > chunkMeta.End {
 			counterLock.Lock()
-			skippedChunks += 1
+			skippedChunks++
 			counterLock.Unlock()
 			continue
-		}
-		if eg.Stop() {
-			return fmt.Errorf("Got an error in thread management. Stopping.")
 		}
 
 		n := n
@@ -89,12 +89,12 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			partBuffer, localChunkEmpty, err := f.getLocalChunk(int64(chunkMeta.Start), int64(chunkMeta.End-chunkMeta.Start+1))
 			if err != nil {
-				return err
+				return fmt.Errorf("getting local chunk: %s", err)
 			}
 
 			if localChunkEmpty && chunkMeta.IsEmpty {
 				counterLock.Lock()
-				emptyChunks += 1
+				emptyChunks++
 				counterLock.Unlock()
 				return nil
 			}
@@ -116,14 +116,12 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 				shasum := fmt.Sprintf("%x", readSHA1Sum)
 				if shasum == chunkMeta.ContentSHA1 {
 					counterLock.Lock()
-					correctChunks += 1
+					correctChunks++
 					counterLock.Unlock()
 					return nil
 				}
 				log.Printf("- Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
 			}
-
-			expectedSum := chunkMeta.ContentSHA1
 
 			//try from cache first
 			var openChunk io.ReadCloser
@@ -143,7 +141,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 				openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA1)
 			}
 			if err != nil {
-				return err
+				return fmt.Errorf("open chunk: %s", err)
 			}
 			defer openChunk.Close()
 
@@ -160,7 +158,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 			}
 
 			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
-			if expectedSum != newSHA1Sum {
+			if chunkMeta.ContentSHA1 != newSHA1Sum {
 				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
 			}
 

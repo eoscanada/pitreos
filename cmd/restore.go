@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var timestampString string
@@ -17,7 +18,7 @@ This is optimized for large and sparse files, like virtual machines disks or nod
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		pitr := getPITR(backupStorageURL)
+		pitr := getPITR(viper.GetString("store"))
 
 		err := pitr.RestoreFromBackup(args[1], args[0])
 		errorCheck("restoring from backup", err)
@@ -25,6 +26,8 @@ This is optimized for large and sparse files, like virtual machines disks or nod
 }
 
 func init() {
+	RootCmd.AddCommand(restoreCmd)
+
 	restoreCmd.SetUsageTemplate(restoreUsageTemplate)
 }
 

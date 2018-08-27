@@ -23,7 +23,7 @@ func NewGZipReadCloser(src io.ReadCloser) (*GZipReadCloser, error) {
 }
 
 func (g *GZipReadCloser) Close() error {
-	err1 := g.Close()
+	err1 := g.Reader.Close()
 	err2 := g.src.Close()
 
 	if err1 == nil && err2 == nil {

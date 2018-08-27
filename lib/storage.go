@@ -34,6 +34,7 @@ func SetupStorage(baseURL string) (Storage, error) {
 
 	switch base.Scheme {
 	case "file", "":
+		fmt.Println("MAMAA", base)
 		return NewFSStorage(base)
 	case "gs":
 		return NewGSStorage(base)
@@ -170,10 +171,26 @@ type FSStorage struct {
 	baseURL *url.URL
 }
 
-func NewFSStorage(baseURL *url.URL) (*FSStorage, error) {
+func NewFSStorage(baseURL *url.URL) (out *FSStorage, err error) {
 	if baseURL.Scheme != "file" && baseURL.Scheme != "" {
 		return nil, fmt.Errorf("invalid filesystem storage scheme %q", baseURL.Scheme)
 	}
+
+	if !strings.HasPrefix(baseURL.Path, "/") {
+		baseURL.Path, err = filepath.Abs(baseURL.Path)
+		if err != nil {
+			return
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Join(baseURL.Path, "chunks"), 0755); err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(filepath.Join(baseURL.Path, "indexes"), 0755); err != nil {
+		return nil, err
+	}
+
 	return &FSStorage{
 		baseURL: baseURL,
 	}, nil
@@ -197,11 +214,11 @@ func (s *FSStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) 
 }
 
 func (s *FSStorage) indexPath(name string) string {
-	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "indexes", fmt.Sprintf("%s.yaml", name))
+	return path.Join(s.baseURL.Path, "indexes", fmt.Sprintf("%s.yaml", name))
 }
 
 func (s *FSStorage) chunkPath(hash string) string {
-	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "chunks", fmt.Sprintf("%s", hash))
+	return path.Join(s.baseURL.Path, "chunks", hash)
 }
 
 func (s *FSStorage) WriteBackupIndex(name string, content []byte) (err error) {
@@ -228,7 +245,7 @@ func (s *FSStorage) putObject(location string, content []byte) (err error) {
 func (s *FSStorage) getObject(location string) (out io.ReadCloser, err error) {
 	fl, err := os.Open(location)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("getObject: %s", err)
 	}
 
 	return NewGZipReadCloser(fl)

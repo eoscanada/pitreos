@@ -14,3 +14,7 @@ var versionCmd = &cobra.Command{
 		fmt.Printf("Version: %s\nGit Hash: %s\nBuild time: %s\n", Version, BuildHash, BuildTime)
 	},
 }
+
+func init() {
+	RootCmd.AddCommand(versionCmd)
+}

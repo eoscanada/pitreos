@@ -5,11 +5,10 @@ import (
 )
 
 type PITR struct {
-	chunkSize              int64
-	threads                int
-	transferTimeout        time.Duration
-	AppendonlyOptimization bool
-	AppendonlyFiles        []string
+	chunkSize       int64
+	threads         int
+	transferTimeout time.Duration
+	AppendonlyFiles []string
 
 	cacheStorage Storage
 	storage      Storage

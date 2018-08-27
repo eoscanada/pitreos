@@ -7,6 +7,7 @@ import (
 	"time"
 
 	pitreos "github.com/eoscanada/pitreos/lib"
+	"github.com/spf13/viper"
 )
 
 func errorCheck(prefix string, err error) {
@@ -20,11 +21,15 @@ func getPITR(storageURL string) *pitreos.PITR {
 	storage, err := pitreos.SetupStorage(storageURL)
 	errorCheck("setting up storage", err)
 
-	pitr := pitreos.New(chunkSizeMiB, threads, time.Second*time.Duration(transferTimeoutSeconds), storage)
+	fmt.Println("Using storage:", storageURL)
+
+	appendonlyFiles := viper.GetStringSlice("appendonly-files")
+
+	pitr := pitreos.New(viper.GetInt64("chunk-size"), viper.GetInt("threads"), time.Second*time.Duration(viper.GetInt("timeout")), storage)
 	pitr.AppendonlyFiles = appendonlyFiles
 
-	if caching {
-		cacheURL, err := url.Parse(cacheDir)
+	if viper.GetBool("enable-caching") {
+		cacheURL, err := url.Parse(viper.GetString("cache-dir"))
 		errorCheck("--cache-storage path invalid", err)
 
 		cacheStorage, _ := pitreos.NewFSStorage(cacheURL)

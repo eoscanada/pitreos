@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -16,15 +19,11 @@ var (
 )
 
 var (
-	chunkSizeMiB           int64
-	threads                int
-	transferTimeoutSeconds int
-	cfgFile                string
 	cacheDir               string
 	caching                bool
 	appendonlyOptimization bool
 	appendonlyFiles        []string
-	backupStorageURL string
+	backupStorageURL       string
 )
 
 var RootCmd = &cobra.Command{
@@ -46,33 +45,48 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initCaching)
+	cobra.OnInitialize(initConfig)
 
-	RootCmd.AddCommand(backupCmd)
-	RootCmd.AddCommand(restoreCmd)
-	RootCmd.AddCommand(versionCmd)
-
-	RootCmd.PersistentFlags().StringVarP(&backupStorageURL, "store", "s", "", "Storage URL, like gs://bucket/path or file:///path/to/storage")
-
-	RootCmd.PersistentFlags().Int64Var(&chunkSizeMiB, "chunk-size", 50, "Size in MiB of the chunks when splitting the file")
-	RootCmd.PersistentFlags().IntVar(&threads, "threads", 24, "Number of threads for concurrent hashing and transfer")
-	RootCmd.PersistentFlags().IntVar(&transferTimeoutSeconds, "timeout", 300, "Timeout in seconds for each and every chunk transfer")
-
-	RootCmd.PersistentFlags().StringVar(&cacheDir, "cache-dir", "", "Cache directory (default is $HOME/.pitreos/cache)")
-	RootCmd.PersistentFlags().BoolVarP(&caching, "enable-caching", "c", false, "Keep/use a copy of every block file sent")
-	RootCmd.PersistentFlags().BoolVar(&appendonlyOptimization, "use-appendonly", true, "Use the optimizations on 'appendonly-files'")
-	RootCmd.PersistentFlags().StringSliceVarP(&appendonlyFiles, "appendonly-files", "a", []string{"blocks/blocks.log"}, "Files treated as appendonly")
-
-}
-
-func initCaching() {
-	if cacheDir != "" {
-		return
-	}
 	home, err := homedir.Dir()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	cacheDir = path.Join(home, ".pitreos", "cache")
+
+	RootCmd.PersistentFlags().StringP("store", "s", "", "Storage URL, like gs://bucket/path or file:///path/to/storage")
+
+	RootCmd.PersistentFlags().Int64("chunk-size", 50, "Size in MiB of the chunks when splitting the file")
+	RootCmd.PersistentFlags().Int("threads", 24, "Number of threads for concurrent hashing and transfer")
+	RootCmd.PersistentFlags().Int("timeout", 300, "Timeout in seconds for each and every chunk transfer")
+
+	RootCmd.PersistentFlags().String("cache-dir", path.Join(home, ".pitreos", "cache"), "Cache directory (default is $HOME/.pitreos/cache)")
+	RootCmd.PersistentFlags().BoolP("enable-caching", "c", false, "Keep/use a copy of every block file sent")
+	RootCmd.PersistentFlags().StringSliceP("appendonly-files", "a", []string{}, "Files treated as append-only (ex: blocks/blocks.log)")
+
+	for _, flag := range []string{"store", "chunk-size", "threads", "timeout", "cache-dir", "enable-caching", "appendonly-files"} {
+		if err := viper.BindPFlag(flag, RootCmd.PersistentFlags().Lookup(flag)); err != nil {
+			panic(err)
+		}
+	}
+
+}
+
+func initConfig() {
+	viper.SetEnvPrefix("PITREOS")
+	viper.AutomaticEnv()
+	replacer := strings.NewReplacer("-", "_")
+	viper.SetEnvKeyReplacer(replacer)
+
+	viper.SetConfigName(".pitreos")
+
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Println("Couldn't find cwd:", err)
+		os.Exit(1)
+	}
+
+	viper.AddConfigPath(dir)
+	if err := viper.ReadInConfig(); err != nil {
+		log.Println("Error reading configuration:", err)
+	}
 }

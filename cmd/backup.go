@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var metadataJSON string
@@ -20,20 +21,28 @@ This approach is optimized for large files`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		var metadata map[string]interface{}
-		err := json.Unmarshal([]byte(metadataJSON), &metadata)
+		err := json.Unmarshal([]byte(viper.GetString("meta")), &metadata)
 		errorCheck("unmarshaling --meta", err)
 
-		pitr := getPITR(backupStorageURL)
+		pitr := getPITR(viper.GetString("store"))
 
-		err = pitr.GenerateBackup(args[0], backupTag, metadata)
+		err = pitr.GenerateBackup(args[0], viper.GetString("tag"), metadata)
 		errorCheck("storing backup", err)
 	},
 }
 
 func init() {
-	backupCmd.Flags().StringVarP(&metadataJSON, "meta", "m", `{}`, "Additional metadata in JSON format to store with backup")
-	backupCmd.Flags().StringVarP(&backupTag, "tag", "t", "default", "Backup tag, appended to timestamp")
+	RootCmd.AddCommand(backupCmd)
+
+	backupCmd.Flags().StringP("meta", "m", `{}`, "Additional metadata in JSON format to store with backup")
+	backupCmd.Flags().StringP("tag", "t", "default", "Backup tag, appended to timestamp")
 	backupCmd.SetUsageTemplate(backupUsageTemplate)
+
+	for _, flag := range []string{"meta", "tag"} {
+		if err := viper.BindPFlag(flag, backupCmd.Flags().Lookup(flag)); err != nil {
+			panic(err)
+		}
+	}
 }
 
 // adding the "Args" definition (SOURCE / DESTINATION) right below the USAGE definition

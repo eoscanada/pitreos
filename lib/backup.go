@@ -17,10 +17,9 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 	now := time.Now()
 	backupName := makeBackupName(now, tag)
 	bm := &BackupIndex{
-		Date:        now.UTC(),
-		Kind:        "filesMap",
-		MetaVersion: "v2",
-		Details:     metadata,
+		Date:    now.UTC(),
+		Version: "v2",
+		Meta:    metadata,
 	}
 
 	dirs, err := getDirFiles(source)
@@ -57,11 +56,9 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 	fileInfo, _ := f.file.Stat()
 	fileMeta := &FileIndex{
-		Kind:        "blobMap",
-		MetaVersion: "v1",
-		FileName:    relFileName,
-		TotalSize:   fileInfo.Size(),
-		Date:        timestamp,
+		FileName:  relFileName,
+		TotalSize: fileInfo.Size(),
+		Date:      timestamp,
 	}
 	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
 	log.Printf("Splitting %s to %d pieces.\n", relFileName, totalPartsNum)
@@ -125,7 +122,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				if exists {
 					log.Printf("File already exists for sha1: %s", chunkMeta.ContentSHA1)
 				} else {
-					log.Printf("Sending file to google storage: %s", chunkMeta.ContentSHA1)
+					log.Printf("Sending file to Storage: %s", chunkMeta.ContentSHA1)
 					writeChan := make(chan error, 1)
 					go func() {
 						writeChan <- p.storage.WriteChunk(chunkMeta.ContentSHA1, partBuffer)
@@ -179,6 +176,7 @@ func makeBackupName(now time.Time, tag string) string {
 	dt := now.UTC().Format(time.RFC3339)
 	dt = strings.Replace(dt, ":", "-", -1)
 	dt = strings.Replace(dt, "T", "-", -1)
+	dt = strings.Replace(dt, "Z", "", -1)
 	backupName := fmt.Sprintf("%s--%s", dt, tag)
 	return backupName
 }
