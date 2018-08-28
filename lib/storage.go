@@ -5,6 +5,8 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log"
+	"math"
 	"net/url"
 	"os"
 	"path"
@@ -17,7 +19,7 @@ import (
 )
 
 type Storage interface {
-	ListBackups(limit int, prefix string) ([]string, error)
+	ListBackups(limit int, offset int, prefix string) ([]string, error)
 	OpenBackupIndex(name string) (io.ReadCloser, error)
 	WriteBackupIndex(name string, content []byte) error
 
@@ -34,7 +36,6 @@ func SetupStorage(baseURL string) (Storage, error) {
 
 	switch base.Scheme {
 	case "file", "":
-		fmt.Println("MAMAA", base)
 		return NewFSStorage(base)
 	case "gs":
 		return NewGSStorage(base)
@@ -66,12 +67,14 @@ func NewGSStorage(baseURL *url.URL) (*GSStorage, error) {
 	}, nil
 }
 
-func (s *GSStorage) ListBackups(limit int, prefix string) (out []string, err error) {
-	location := s.indexPath(prefix)
-	basePrefix := strings.Replace(s.indexPath(""), ".yaml", "", 1)
+func (s *GSStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
+	slashLocation := strings.TrimSuffix(s.indexPath(prefix), ".yaml.gz") // ex: /myapp/v1/indexes/2018-*
+	location := strings.TrimPrefix(slashLocation, "/")                   // GS does not want "/" in prefix filter
 
 	ctx := context.Background()
 	iter := s.client.Bucket(s.baseURL.Host).Objects(ctx, &storage.Query{Prefix: location})
+
+	var chronoOut []string
 	for {
 		objAttrs, err := iter.Next()
 		if err != nil {
@@ -81,19 +84,18 @@ func (s *GSStorage) ListBackups(limit int, prefix string) (out []string, err err
 			return nil, err
 		}
 
-		// if objAttrs == nil {
-		// 	return "", fmt.Errorf("Error, probably missing permissions...")
-		// }
 		name := objAttrs.Name
-		if !strings.HasPrefix(name, basePrefix) {
-			return nil, fmt.Errorf("returned object attrs is not based at %q: %q", basePrefix, name)
+		if !strings.HasSuffix(name, ".yaml.gz") {
+			log.Printf("ignoring file: %s with wrong suffix", name)
+			break // ignore any non-yaml.gz file
 		}
 
-		out = append(out, strings.Replace(objAttrs.Name[len(basePrefix):], ".yaml", "", 1))
+		chronoOut = append(chronoOut, objAttrs.Name)
 
-		if len(out) >= limit {
-			break
-		}
+	}
+
+	for i := len(chronoOut) - offset - 1; i >= int(math.Max(0, float64(len(chronoOut)-offset-limit))); i-- {
+		out = append(out, strings.TrimSuffix(path.Base(chronoOut[i]), ".yaml.gz"))
 	}
 
 	return
@@ -104,7 +106,10 @@ func (s *GSStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) 
 }
 
 func (s *GSStorage) indexPath(name string) string {
-	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "indexes", fmt.Sprintf("%s.yaml", name))
+	if name == "" {
+		return path.Join(s.baseURL.Path, "indexes")
+	}
+	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "indexes", fmt.Sprintf("%s.yaml.gz", name))
 }
 
 func (s *GSStorage) chunkPath(hash string) string {
@@ -196,14 +201,16 @@ func NewFSStorage(baseURL *url.URL) (out *FSStorage, err error) {
 	}, nil
 }
 
-func (s *FSStorage) ListBackups(limit int, prefix string) (out []string, err error) {
-	matches, err := filepath.Glob(fmt.Sprintf("%s*", prefix))
+func (s *FSStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
+
+	matches, err := filepath.Glob(fmt.Sprintf("%s/%s*.yaml.gz", s.indexPath(""), prefix))
 	if err != nil {
 		return
 	}
 
-	for _, m := range matches {
-		out = append(out, strings.Replace(m, ".yaml", "", 1))
+	// reverse and keep 'limit' entries max
+	for i := len(matches) - offset - 1; i >= int(math.Max(0, float64(len(matches)-offset-limit))); i-- {
+		out = append(out, strings.TrimSuffix(path.Base(matches[i]), ".yaml.gz"))
 	}
 
 	return
@@ -214,7 +221,10 @@ func (s *FSStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) 
 }
 
 func (s *FSStorage) indexPath(name string) string {
-	return path.Join(s.baseURL.Path, "indexes", fmt.Sprintf("%s.yaml", name))
+	if name == "" {
+		return path.Join(s.baseURL.Path, "indexes")
+	}
+	return path.Join(s.baseURL.Path, "indexes", fmt.Sprintf("%s.yaml.gz", name))
 }
 
 func (s *FSStorage) chunkPath(hash string) string {

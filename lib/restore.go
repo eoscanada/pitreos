@@ -159,7 +159,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
 			if chunkMeta.ContentSHA1 != newSHA1Sum {
-				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, expectedSum)
+				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, chunkMeta.ContentSHA1)
 			}
 
 			log.Printf("- Chunk %d/%d download finished, new sha1: %s\n", n+1, numChunks, newSHA1Sum)

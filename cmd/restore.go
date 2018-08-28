@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -8,9 +11,12 @@ import (
 var timestampString string
 
 var restoreCmd = &cobra.Command{
-	Use:     "restore [backup name] [destination path]",
-	Short:   "Restores your files to a specified point in time (default: latest available)",
-	Example: `  pitreos restore gs://mybackups/projectname file:///home/nodeos/data -c --timestamp $(date -d "2 hours ago" +%s)`,
+	Use:   "restore [-t tagname|backup name] {destination path}",
+	Short: "Restores your files to a specified point in time (default: latest available)",
+	Example: `
+  pitreos restore 2018-08-28-18-15-45--default ../mydata -c 
+  pitreos restore -t default ../mydata -c
+`,
 	Long: `Restores your files to the closest available backup before
 the requested timestamp (default: now).
 It compares existing chunks of data in your files and downloads only the necessary data.
@@ -20,6 +26,19 @@ This is optimized for large and sparse files, like virtual machines disks or nod
 
 		pitr := getPITR(viper.GetString("store"))
 
+		tag := viper.GetBool("restoretag")
+
+		if tag {
+			lastBackup, err := pitr.GetLatestBackup(args[0])
+			errorCheck("Getting last available backup", err)
+			if lastBackup == "" {
+				fmt.Printf("ERROR: %s: %s\n", "Last available backup found empty string", err)
+				os.Exit(1)
+			}
+			err = pitr.RestoreFromBackup(args[1], lastBackup)
+			errorCheck("restoring from backup", err)
+			return
+		}
 		err := pitr.RestoreFromBackup(args[1], args[0])
 		errorCheck("restoring from backup", err)
 	},
@@ -28,28 +47,12 @@ This is optimized for large and sparse files, like virtual machines disks or nod
 func init() {
 	RootCmd.AddCommand(restoreCmd)
 
-	restoreCmd.SetUsageTemplate(restoreUsageTemplate)
-}
+	restoreCmd.Flags().BoolP("tag", "t", false, "If set, source will be treated as a tag instead of a full backup name")
 
-// adding the "Args" definition (SOURCE / DESTINATION) right below the USAGE definition
-var restoreUsageTemplate = `Usage:{{if .Runnable}}
-  {{if .HasAvailableFlags}}{{appendIfNotPresent .UseLine "[flags]"}}{{else}}{{.UseLine}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
-  {{ .CommandPath}} [command]{{end}}
-  * SOURCE: File path (ex: /var/backups) or Google Storage URL (ex: gs://mybackups/projectname)
-  * DESTINATION: File path (ex: ../mydata)
-  {{if gt .Aliases 0}}
-Aliases:
-  {{.NameAndAliases}}
-{{end}}{{if .HasExample}}
-Examples:
-{{ .Example }}{{end}}{{ if .HasAvailableSubCommands}}
-Available Commands:{{range .Commands}}{{if .IsAvailableCommand}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{ if .HasAvailableLocalFlags}}
-Flags:
-{{.LocalFlags.FlagUsages | trimRightSpace}}{{end}}{{ if .HasAvailableInheritedFlags}}
-Global Flags:
-{{.InheritedFlags.FlagUsages | trimRightSpace}}{{end}}{{if .HasHelpSubCommands}}
-Additional help topics:{{range .Commands}}{{if .IsHelpCommand}}
-  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{ if .HasAvailableSubCommands }}
-Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
-`
+	for _, flag := range []string{"tag"} {
+		if err := viper.BindPFlag("restore"+flag, restoreCmd.Flags().Lookup(flag)); err != nil {
+			panic(err)
+		}
+	}
+
+}

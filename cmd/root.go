@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -53,13 +54,14 @@ func init() {
 		os.Exit(1)
 	}
 
-	RootCmd.PersistentFlags().StringP("store", "s", "", "Storage URL, like gs://bucket/path or file:///path/to/storage")
+	defaultBackupURL := url.URL{Scheme: "file", Host: "", Path: path.Join(home, ".pitreos", "backups")}
+	RootCmd.PersistentFlags().StringP("store", "s", defaultBackupURL.String(), "Storage URL, like gs://bucket/path")
 
 	RootCmd.PersistentFlags().Int64("chunk-size", 50, "Size in MiB of the chunks when splitting the file")
 	RootCmd.PersistentFlags().Int("threads", 24, "Number of threads for concurrent hashing and transfer")
 	RootCmd.PersistentFlags().Int("timeout", 300, "Timeout in seconds for each and every chunk transfer")
 
-	RootCmd.PersistentFlags().String("cache-dir", path.Join(home, ".pitreos", "cache"), "Cache directory (default is $HOME/.pitreos/cache)")
+	RootCmd.PersistentFlags().String("cache-dir", path.Join(home, ".pitreos", "cache"), "Cache directory")
 	RootCmd.PersistentFlags().BoolP("enable-caching", "c", false, "Keep/use a copy of every block file sent")
 	RootCmd.PersistentFlags().StringSliceP("appendonly-files", "a", []string{}, "Files treated as append-only (ex: blocks/blocks.log)")
 
@@ -85,8 +87,17 @@ func initConfig() {
 		os.Exit(1)
 	}
 
-	viper.AddConfigPath(dir)
-	if err := viper.ReadInConfig(); err != nil {
-		log.Println("Error reading configuration:", err)
+	home, err := homedir.Dir()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
+
+	viper.AddConfigPath(dir)
+	viper.AddConfigPath(path.Join(home))
+	if err := viper.ReadInConfig(); err != nil {
+		log.Println("Not using config file:", err)
+		return
+	}
+	log.Printf("Getting configuration from file: %s\n", viper.ConfigFileUsed())
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/abourget/llerrgroup"
-	yaml "gopkg.in/yaml.v2"
+	"github.com/ghodss/yaml"
 )
 
 func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}) error {
@@ -156,7 +156,9 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		log.Fatalln(err)
 	}
 
-	log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
+	if emptyChunks != 0 {
+		log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
+	}
 	close(chunkCh)
 	<-done
 

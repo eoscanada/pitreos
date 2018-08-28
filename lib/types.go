@@ -5,23 +5,29 @@ import (
 )
 
 type BackupIndex struct {
-	Version string                 `yaml:"version"`
-	Date    time.Time              `yaml:"date"`
-	Tag     string                 `yaml:"tag"`
-	Meta    map[string]interface{} `yaml:"meta"`
-	Files   []*FileIndex           `yaml:"files"`
+	Version string                 `json:"version"`
+	Date    time.Time              `json:"date"`
+	Tag     string                 `json:"tag"`
+	Meta    map[string]interface{} `json:"meta"`
+	Files   []*FileIndex           `json:"files"`
 }
 
 type FileIndex struct {
-	FileName  string      `yaml:"filename"`
-	Date      time.Time   `yaml:"date"`
-	TotalSize int64       `yaml:"size"`
-	Chunks    []*ChunkDef `yaml:"chunks"`
+	FileName  string      `json:"filename"`
+	Date      time.Time   `json:"date"`
+	TotalSize int64       `json:"size"`
+	Chunks    []*ChunkDef `json:"chunks"`
 }
 
 type ChunkDef struct {
-	Start       int64  `yaml:"start"`
-	End         int64  `yaml:"end"`
-	IsEmpty     bool   `yaml:"empty,omitempty"`
-	ContentSHA1 string `yaml:"contentSHA1,omitempty"` // content ?
+	Start       int64  `json:"start"`
+	End         int64  `json:"end"`
+	IsEmpty     bool   `json:"empty,omitempty"`
+	ContentSHA1 string `json:"contentSHA1,omitempty"`
+}
+
+type ListableBackup struct {
+	Name string
+	Meta map[string]interface{}
+	Date time.Time
 }

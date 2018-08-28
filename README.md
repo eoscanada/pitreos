@@ -16,15 +16,18 @@ Perfect for EOS state and block.log, or virtual machine images
 # How does it work ?
 ## Backing up
 1. It splits each file into smaller chunks and computes the hashes of each of those.
-2. It sends those chunks along with a YAML metadata file linking to the file chunks.
-
+2. It sends those chunks to a defined storage URL along with an index file linking to the file chunks.
+3. Those chunks can also be cached locally.
+4. Backups are stored with a timestamp and an optional tag. Use tags to differentiate backups which may share data chunks but have different uses (ex: dev vs prod, osx vs linux...)
 
 ## Restoring
-1. Restore process first looks at the remote location for "index.yaml" files under timestamp-named folders for the most recent backup before the requested timestamp.
-2. The chosen index.yaml lists all the files to restore, with URLs to their metadata yaml files 
-3. Each non-existing local file is created as an empty sparse file with the expected length
-4. Existing files are truncated (or enlarged) to the expected length
-5. Local chunks are sha1sum'd and compared to the expected chunk
+1. The "list" command will fetch the last backups from your defined storage URL
+2. The "restore" command will fetch the backup index chosen chosen from the list. (Alternatively, you can ask pitreos to restore to the latest backup of a specific tag)
+3. The backup index is parsed: it contains the list of files and their content based on their chunk hashes. 
+4. Each non-existing local file is created as an empty sparse file with the expected length, while existing files are truncated (or enlarged) to the expected length
+5. Local chunks are sha1sum'd and compared to the expected chunk.
+6. Chunks which should be empty get a hole punched through them (becoming a sparse file)
+7. Chunks which should have different content are downloaded from your backup store.
 
 ## Optimizations:
 * Empty chunks (no data or only null bytes) are not transferred
@@ -32,6 +35,10 @@ Perfect for EOS state and block.log, or virtual machine images
 * Chunks with data are compressed before transfer
 * Caching can be enabled to keep any downloaded/uploaded chunk locally and quickly restore your files.
 * Chunks are not uploaded again if the same content exist at the same destination (with the same backup path)
+* Existing data in files flagged as "appendonly-files" are not verified on restore. Only missing data at the end of the file is downloaded.
+
+## Known issues:
+* File permissions are not managed
 
 # How to install ?
 
@@ -42,21 +49,40 @@ $ make deps
 $ make install
 ```
 
-# Example uses
+# Examples
+
+## Example .pitreos.yaml in your workspace
+```# $HOME/myproject/.pitreos.yaml
+store: gs://mybackups/nodeos_data
+tag: john_dev
+```
+
+## Backup to default location
+`pitreos backup ./mydata`
+--> This will send your chunks to $HOME/.pitreos/backups/chunks/{sha1sum}
+--> This will send your backup index to $HOME/.pitreos/backups/indexes/{timestamp}-default.yaml.gz
 
 ## Backup to Google Storage
 
-`pitreos -c backup --metadata '{"blocknum": 123456, "version": "1.2.1"}' . gs://mybackups/projectname `
- --> This will send your data chunks under `gs://mybackups/projectname/blobs/`
- --> your metadata files will be located under `gs://mybackups/projectname/{timestamp}/`
+`pitreos backup mydata -s gs://mybackups/projectname -t dev -c -m '{"blocknum": 123456, "version": "1.2.1"}'`
+ --> This will send your data chunks under `gs://mybackups/projectname/chunks/`
+ --> your backup index file will be located under `gs://mybackups/projectname/indexes/{timestamp}-dev.yaml.gz`
+ --> your chunks file will also be savec in your default cache location ($HOME/.pitreos/cache)
  --> The backup metadata will contain the provided arbitrary values "blocknum" and "version"
 
-## Restore with given timestamp
+## List your 5 last backups
+`pitreos list --limit 5`
+--> 2018-08-28-19-24-59--default
+--> 2018-08-28-18-15-39--john-dev
 
-`pitreos -c restore gs://mybackups/projectname . --timestamp $(date -d "10 minutes ago" +%s)`
- --> This will restore your data using the most recent backup *before* 10 minutes ago, based on the timestamps found under `gs://mybackups/projectname/{timestamp}`
+## Restore a specific backup
+`pitreos -c restore 2018-08-28-18-15-48--john-dev ./mydata`
+ --> This will restore your data from that backup under ./mydata. Any file already existing there may speed up the process.
 
-## More examples ##
+## Restore from latest backup of a tag
+`pitreos -c restore -t john-dev ./mydata`
+ --> This will restore your data from the latest backup with the "john-dev" tag.
 
+## More examples in help !
 Run "pitreos help", "pitreos help backup" and "pitreos help restore" for more examples
 

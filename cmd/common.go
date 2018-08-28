@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"time"
@@ -21,7 +22,7 @@ func getPITR(storageURL string) *pitreos.PITR {
 	storage, err := pitreos.SetupStorage(storageURL)
 	errorCheck("setting up storage", err)
 
-	fmt.Println("Using storage:", storageURL)
+	log.Println("Using storage:", storageURL)
 
 	appendonlyFiles := viper.GetStringSlice("appendonly-files")
 
