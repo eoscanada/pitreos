@@ -52,36 +52,38 @@ $ make install
 # Examples
 
 ## Example .pitreos.yaml in your workspace
+
 ```# $HOME/myproject/.pitreos.yaml
 store: gs://mybackups/nodeos_data
 tag: john_dev
 ```
 
 ## Backup to default location
-`pitreos backup ./mydata`
---> This will send your chunks to $HOME/.pitreos/backups/chunks/{sha1sum}
---> This will send your backup index to $HOME/.pitreos/backups/indexes/{timestamp}-default.yaml.gz
+
+```pitreos backup ./mydata```
+* This will send your chunks to $HOME/.pitreos/backups/chunks/{sha1sum}
+* This will send your backup index to $HOME/.pitreos/backups/indexes/{timestamp}-default.yaml.gz
 
 ## Backup to Google Storage
 
-`pitreos backup mydata -s gs://mybackups/projectname -t dev -c -m '{"blocknum": 123456, "version": "1.2.1"}'`
- --> This will send your data chunks under `gs://mybackups/projectname/chunks/`
- --> your backup index file will be located under `gs://mybackups/projectname/indexes/{timestamp}-dev.yaml.gz`
- --> your chunks file will also be savec in your default cache location ($HOME/.pitreos/cache)
- --> The backup metadata will contain the provided arbitrary values "blocknum" and "version"
+```pitreos backup mydata -s gs://mybackups/projectname -t dev -c -m '{"blocknum": 123456, "version": "1.2.1"}'```
+* This will send your data chunks under `gs://mybackups/projectname/chunks/`
+* your backup index file will be located under `gs://mybackups/projectname/indexes/{timestamp}-dev.yaml.gz`
+* your chunks file will also be savec in your default cache location ($HOME/.pitreos/cache)
+* The backup metadata will contain the provided arbitrary values "blocknum" and "version"
 
 ## List your 5 last backups
-`pitreos list --limit 5`
---> 2018-08-28-19-24-59--default
---> 2018-08-28-18-15-39--john-dev
+```pitreos list --limit 5```
+* 2018-08-28-19-24-59--default
+* 2018-08-28-18-15-39--john-dev
 
 ## Restore a specific backup
-`pitreos -c restore 2018-08-28-18-15-48--john-dev ./mydata`
- --> This will restore your data from that backup under ./mydata. Any file already existing there may speed up the process.
+```pitreos -c restore 2018-08-28-18-15-48--john-dev ./mydata```
+* This will restore your data from that backup under ./mydata. Any file already existing there may speed up the process.
 
 ## Restore from latest backup of a tag
-`pitreos -c restore -t john-dev ./mydata`
- --> This will restore your data from the latest backup with the "john-dev" tag.
+```pitreos -c restore -t john-dev ./mydata```
+* This will restore your data from the latest backup with the "john-dev" tag.
 
 ## More examples in help !
 Run "pitreos help", "pitreos help backup" and "pitreos help restore" for more examples
