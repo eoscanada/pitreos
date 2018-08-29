@@ -52,6 +52,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	if stringarrayContains(p.AppendonlyFiles, fm.FileName) {
 		f.isAppendOnly = true
 	}
+
 	fstats, err := f.file.Stat()
 	if err != nil {
 		return err
@@ -72,9 +73,6 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	eg := llerrgroup.New(p.threads)
 	numChunks := len(fm.Chunks)
 	for n, chunkMeta := range fm.Chunks {
-		if eg.Stop() {
-			break
-		}
 
 		if f.isAppendOnly && f.originalSize > chunkMeta.End {
 			counterLock.Lock()
@@ -83,6 +81,9 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 			continue
 		}
 
+		if eg.Stop() {
+			break
+		}
 		n := n
 		chunkMeta := chunkMeta
 		eg.Go(func() error {
@@ -172,7 +173,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	}
 
 	if skippedChunks > 0 {
-		log.Printf("- %d/%d chunks were not verified on appendonly file %s. use --enable-appendonly-optimization=false to force verification\n", skippedChunks, numChunks, fm.FileName)
+		log.Printf("- %d/%d chunks were not verified on this appendonly file %s.\n", skippedChunks, numChunks, fm.FileName)
 	}
 	if correctChunks > 0 {
 		log.Printf("- %d/%d chunks were already correct. on file %s\n", correctChunks, numChunks, fm.FileName)
