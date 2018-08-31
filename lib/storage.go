@@ -3,10 +3,12 @@ package pitreos
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -278,5 +280,110 @@ func (s *FSStorage) ChunkExists(hash string) (bool, error) {
 		}
 		return false, err
 	}
+	return true, nil
+}
+
+//
+// HTTP Storage
+//
+
+type HTTPStorage struct {
+	baseURL *url.URL
+	Client  *http.Client
+}
+
+func NewHTTPStorage(baseURL *url.URL) (out *HTTPStorage, err error) {
+	if baseURL.Scheme != "http" && baseURL.Scheme != "https" {
+		return nil, fmt.Errorf("invalid http storage scheme %q", baseURL.Scheme)
+	}
+
+	return &HTTPStorage{
+		baseURL: baseURL,
+		Client:  http.DefaultClient,
+	}, nil
+}
+
+func (s *HTTPStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
+	q := url.Values{}
+	q.Set("limit", fmt.Sprintf("%d", limit))
+	q.Set("offset", fmt.Sprintf("%d", offset))
+	q.Set("prefix", prefix)
+	url := fmt.Sprintf("%s/list?%s", s.baseURL.String(), q.Encode())
+	resp, err := s.Client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+
+	if err = dec.Decode(&out); err != nil {
+		return nil, err
+	}
+
+	return
+}
+
+func (s *HTTPStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) {
+	return s.getObject(s.indexPath(name))
+}
+
+func (s *HTTPStorage) indexPath(name string) string {
+	if name == "" {
+		return "indexes"
+	}
+	return path.Join("indexes", fmt.Sprintf("%s.yaml.gz", name))
+}
+
+func (s *HTTPStorage) chunkPath(hash string) string {
+	return path.Join("chunks", hash)
+}
+
+func (s *HTTPStorage) WriteBackupIndex(name string, content []byte) (err error) {
+	return s.putObject(s.indexPath(name), content)
+}
+
+func (s *HTTPStorage) putObject(location string, content []byte) (err error) {
+	return fmt.Errorf("http storage doesn't implement backup, only restores")
+}
+
+func (s *HTTPStorage) getObject(location string) (out io.ReadCloser, err error) {
+	url := fmt.Sprintf("%s/%s", s.baseURL.String(), location)
+	resp, err := s.Client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("request to %s failed with status code %d", url, resp.StatusCode)
+	}
+
+	return NewGZipReadCloser(resp.Body)
+}
+
+func (s *HTTPStorage) WriteChunk(hash string, content []byte) (err error) {
+	return s.putObject(s.chunkPath(hash), content)
+}
+
+func (s *HTTPStorage) OpenChunk(hash string) (out io.ReadCloser, err error) {
+	return s.getObject(s.chunkPath(hash))
+}
+
+func (s *HTTPStorage) ChunkExists(hash string) (bool, error) {
+	location := s.chunkPath(hash)
+
+	url := fmt.Sprintf("%s/%s", s.baseURL.String(), location)
+	resp, err := s.Client.Head(url)
+	if err != nil {
+		return false, err
+	}
+
+	if resp.StatusCode != 200 {
+		if resp.StatusCode == 404 {
+			return false, nil
+		}
+		return false, fmt.Errorf("request to %s failed with status code %d", url, resp.StatusCode)
+	}
+
 	return true, nil
 }
