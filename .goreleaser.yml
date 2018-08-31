@@ -7,12 +7,10 @@ release:
 builds:
 - goos:
   - linux
-  - darwin
   goarch:
   - amd64
   targets:
   - linux_amd64
-  - darwin_amd64
   main: .
   ldflags: github.com/eoscanada/pitreos/cmd.Version={{.Version}} -X github.com/eoscanada/pitreos/cmd.BuildTime={{.Date}} -X github.com/eoscanada/pitreos/cmd.BuildHash={{.Commit}}
   binary: pitreos
