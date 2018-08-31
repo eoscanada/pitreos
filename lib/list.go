@@ -1,11 +1,8 @@
 package pitreos
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
-
-	humanize "github.com/dustin/go-humanize"
 )
 
 func (p *PITR) GetLatestBackup(tag string) (string, error) {
@@ -28,25 +25,23 @@ func (p *PITR) GetLatestBackup(tag string) (string, error) {
 	return "", fmt.Errorf("No backup found")
 }
 
-func (p *PITR) ListBackups(limit int, detailed bool) error {
-	list, err := p.storage.ListBackups(limit, 0, "")
+func (p *PITR) ListBackups(limit, offset int, prefix string, withMeta bool) (out []*ListableBackup, err error) {
+	list, err := p.storage.ListBackups(limit, offset, prefix)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for _, b := range list {
-		if detailed {
-			bi, err := p.downloadBackupIndex(b)
+
+	for _, el := range list {
+		newBackup := &ListableBackup{Name: el}
+		if withMeta {
+			bi, err := p.downloadBackupIndex(el)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			biMetaBytes, err := json.Marshal(bi.Meta)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("%s\t%s\t%+v\n", b, humanize.Time(bi.Date), string(biMetaBytes))
-		} else {
-			fmt.Println(b)
+			newBackup.Meta = bi.Meta
 		}
+		out = append(out, newBackup)
 	}
-	return nil
+
+	return
 }

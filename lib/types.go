@@ -29,5 +29,4 @@ type ChunkDef struct {
 type ListableBackup struct {
 	Name string
 	Meta map[string]interface{}
-	Date time.Time
 }
