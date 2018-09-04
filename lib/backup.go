@@ -1,7 +1,7 @@
 package pitreos
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"math"
@@ -29,7 +29,7 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 			return err
 		}
 
-		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, now)
+		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, now, tag)
 		if err != nil {
 			return fmt.Errorf("upload file to chunks: %s", err)
 		}
@@ -47,7 +47,7 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 	return nil
 }
 
-func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp time.Time) (*FileIndex, error) {
+func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp time.Time, tag string) (*FileIndex, error) {
 	f := NewFileOps(localFile, false)
 	if err := f.Open(); err != nil {
 		return nil, fmt.Errorf("open file: %s", err)
@@ -61,6 +61,33 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		Date:      timestamp,
 	}
 	totalPartsNum := int64(math.Ceil(float64(fileMeta.TotalSize) / float64(p.chunkSize)))
+
+	var previousFile *FileIndex
+	var previousChunksMap = make(map[int64]*ChunkDef)
+
+	// get previousFile if we can find it perfectly in previous backup
+	// with the same tag
+
+	if stringarrayContains(p.AppendonlyFiles, fileMeta.FileName) {
+		previousBackup, err := p.GetLatestBackup(tag)
+		if err == nil && len(previousBackup) > 0 {
+			previousBM, err := p.downloadBackupIndex(previousBackup)
+			if err == nil && previousBM != nil {
+				for _, pf := range previousBM.Files {
+					if pf.FileName == fileMeta.FileName {
+						previousFile = pf
+						f.isAppendOnly = true
+
+						for _, c := range previousFile.Chunks {
+							previousChunksMap[c.Start] = c
+						}
+					}
+				}
+			}
+		}
+
+	}
+
 	log.Printf("Splitting %s to %d pieces.\n", relFileName, totalPartsNum)
 
 	// setup chunk metadata reader to populate fileMeta
@@ -73,6 +100,8 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		done <- true
 	}()
 
+	alreadyBackedupChunks := 0
+	skippedChunks := 0
 	emptyChunks := 0
 	// iterate over chunks
 	eg := llerrgroup.New(p.threads)
@@ -91,6 +120,17 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				End:   partnum*p.chunkSize + partSize - 1,
 			}
 
+			skipChunk := false
+			if f.isAppendOnly && previousFile.TotalSize >= chunkMeta.End {
+				skipChunk = true
+				chunkMeta = previousChunksMap[chunkMeta.Start]
+				chunkCh <- chunkMeta
+				counterLock.Lock()
+				skippedChunks++
+				counterLock.Unlock()
+				return nil
+			}
+
 			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
 			if err != nil {
 				return fmt.Errorf("get chunk contents: %s", err)
@@ -103,29 +143,30 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				counterLock.Unlock()
 			}
 
-			if !blockIsEmpty {
+			if !blockIsEmpty && !skipChunk {
 				log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
-				chunkMeta.ContentSHA1 = fmt.Sprintf("%x", sha1.Sum(partBuffer))
+				chunkMeta.ContentSHA = fmt.Sprintf("%x", sha256.Sum256(partBuffer))
 
 				// don't fail if caching disabled
 				if p.cacheStorage != nil {
-					err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA1, partBuffer)
+					err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
 						return err
 					}
 				}
 
-				exists, err := p.storage.ChunkExists(chunkMeta.ContentSHA1)
+				exists, err := p.storage.ChunkExists(chunkMeta.ContentSHA)
 				if err != nil {
 					return err
 				}
 				if exists {
-					log.Printf("File already exists for sha1: %s", chunkMeta.ContentSHA1)
+					counterLock.Lock()
+					alreadyBackedupChunks++
+					counterLock.Unlock()
 				} else {
-					log.Printf("Sending file to Storage: %s", chunkMeta.ContentSHA1)
 					writeChan := make(chan error, 1)
 					go func() {
-						writeChan <- p.storage.WriteChunk(chunkMeta.ContentSHA1, partBuffer)
+						writeChan <- p.storage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					}()
 					select {
 					case err := <-writeChan:
@@ -134,7 +175,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 						}
 
 					case <-time.After(p.transferTimeout):
-						return fmt.Errorf("Upload of chunk %q to storage timed out", chunkMeta.ContentSHA1)
+						return fmt.Errorf("Upload of chunk %q to storage timed out", chunkMeta.ContentSHA)
 					}
 
 					if err != nil {
@@ -156,6 +197,12 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		log.Fatalln(err)
 	}
 
+	if alreadyBackedupChunks > 0 {
+		log.Printf("- %d/%d chunks were already present in backup store %s.\n", alreadyBackedupChunks, totalPartsNum, fileMeta.FileName)
+	}
+	if skippedChunks > 0 {
+		log.Printf("- %d/%d chunks were not verified on this appendonly file %s.\n", skippedChunks, totalPartsNum, fileMeta.FileName)
+	}
 	if emptyChunks != 0 {
 		log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
 	}

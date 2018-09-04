@@ -1,7 +1,7 @@
 package pitreos
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -111,17 +111,17 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("- Chunk %d/%d invalid, downloading sha1 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA1, numBytes)
+				log.Printf("- Chunk %d/%d invalid, downloading sha256 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA, numBytes)
 			} else {
-				readSHA1Sum := sha1.Sum(partBuffer)
-				shasum := fmt.Sprintf("%x", readSHA1Sum)
-				if shasum == chunkMeta.ContentSHA1 {
+				readSHASum := sha256.Sum256(partBuffer)
+				shasum := fmt.Sprintf("%x", readSHASum)
+				if shasum == chunkMeta.ContentSHA {
 					counterLock.Lock()
 					correctChunks++
 					counterLock.Unlock()
 					return nil
 				}
-				log.Printf("- Chunk %d/%d has sha1 %q, downloading sha1 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA1, numBytes)
+				log.Printf("- Chunk %d/%d has sha256 %q, downloading sha256 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA, numBytes)
 			}
 
 			//try from cache first
@@ -129,17 +129,17 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 			var inCache bool
 			if p.cacheStorage != nil {
 				// Try this first
-				found, err := p.cacheStorage.ChunkExists(chunkMeta.ContentSHA1)
+				found, err := p.cacheStorage.ChunkExists(chunkMeta.ContentSHA)
 				if err != nil {
 					return err
 				}
 				if found {
-					openChunk, err = p.cacheStorage.OpenChunk(chunkMeta.ContentSHA1)
+					openChunk, err = p.cacheStorage.OpenChunk(chunkMeta.ContentSHA)
 					inCache = true
 				}
 			}
 			if openChunk == nil {
-				openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA1)
+				openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA)
 			}
 			if err != nil {
 				return fmt.Errorf("open chunk: %s", err)
@@ -152,18 +152,18 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 			}
 
 			if p.cacheStorage != nil && !inCache {
-				err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA1, newData)
+				err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, newData)
 				if err != nil {
 					return err
 				}
 			}
 
-			newSHA1Sum := fmt.Sprintf("%x", sha1.Sum(newData))
-			if chunkMeta.ContentSHA1 != newSHA1Sum {
-				return fmt.Errorf("Invalid sha1sum from downloaded blob. Got %s, expected %s\n", newSHA1Sum, chunkMeta.ContentSHA1)
+			newSHASum := fmt.Sprintf("%x", sha256.Sum256(newData))
+			if chunkMeta.ContentSHA != newSHASum {
+				return fmt.Errorf("Invalid sha256sum from downloaded blob. Got %s, expected %s\n", newSHASum, chunkMeta.ContentSHA)
 			}
 
-			log.Printf("- Chunk %d/%d download finished, new sha1: %s\n", n+1, numChunks, newSHA1Sum)
+			log.Printf("- Chunk %d/%d download finished, new sha256: %s\n", n+1, numChunks, newSHASum)
 			return f.writeChunkToFile(int64(chunkMeta.Start), newData)
 		})
 

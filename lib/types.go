@@ -20,10 +20,10 @@ type FileIndex struct {
 }
 
 type ChunkDef struct {
-	Start       int64  `json:"start"`
-	End         int64  `json:"end"`
-	IsEmpty     bool   `json:"empty,omitempty"`
-	ContentSHA1 string `json:"contentSHA1,omitempty"`
+	Start      int64  `json:"start"`
+	End        int64  `json:"end"`
+	IsEmpty    bool   `json:"empty,omitempty"`
+	ContentSHA string `json:"contentSHA,omitempty"`
 }
 
 type ListableBackup struct {
