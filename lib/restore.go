@@ -24,6 +24,10 @@ func (p *PITR) RestoreFromBackup(dest string, backupName string) error {
 		return err
 	}
 
+	if bm.Version != p.filemetaVersion {
+		return fmt.Errorf("Incompatible version of backupIndex. Expected: %s, found: %s.", p.filemetaVersion, bm.Version)
+	}
+
 	for _, file := range bm.Files {
 		err := p.downloadFileFromChunks(file, dest)
 		if err != nil {

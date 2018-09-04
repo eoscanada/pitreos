@@ -17,9 +17,10 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 	now := time.Now()
 	backupName := makeBackupName(now, tag)
 	bm := &BackupIndex{
-		Date:    now.UTC(),
-		Version: "v2",
-		Meta:    metadata,
+		ChunkSize: p.chunkSize,
+		Date:      now.UTC(),
+		Version:   p.filemetaVersion,
+		Meta:      metadata,
 	}
 
 	dirs, err := getDirFiles(source)
@@ -72,7 +73,8 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		previousBackup, err := p.GetLatestBackup(tag)
 		if err == nil && len(previousBackup) > 0 {
 			previousBM, err := p.downloadBackupIndex(previousBackup)
-			if err == nil && previousBM != nil {
+			fmt.Printf("filemeta version from previous is: %s and we want \n", previousBM.Version, p.filemetaVersion)
+			if err == nil && previousBM != nil && previousBM.Version == p.filemetaVersion && previousBM.ChunkSize == p.chunkSize {
 				for _, pf := range previousBM.Files {
 					if pf.FileName == fileMeta.FileName {
 						previousFile = pf

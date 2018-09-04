@@ -5,11 +5,12 @@ import (
 )
 
 type BackupIndex struct {
-	Version string                 `json:"version"`
-	Date    time.Time              `json:"date"`
-	Tag     string                 `json:"tag"`
-	Meta    map[string]interface{} `json:"meta"`
-	Files   []*FileIndex           `json:"files"`
+	Version   string                 `json:"version"`
+	Date      time.Time              `json:"date"`
+	Tag       string                 `json:"tag"`
+	Meta      map[string]interface{} `json:"meta"`
+	Files     []*FileIndex           `json:"files"`
+	ChunkSize int64                  `json:"chunk_size"`
 }
 
 type FileIndex struct {

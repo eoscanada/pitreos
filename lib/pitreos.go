@@ -9,6 +9,7 @@ type PITR struct {
 	threads         int
 	transferTimeout time.Duration
 	AppendonlyFiles []string
+	filemetaVersion string
 
 	cacheStorage Storage
 	storage      Storage
@@ -19,6 +20,7 @@ func NewDefaultPITR(storage Storage) *PITR {
 }
 func New(chunkSizeMiB int64, threads int, transferTimeout time.Duration, storage Storage) *PITR {
 	return &PITR{
+		filemetaVersion: "v3",
 		chunkSize:       chunkSizeMiB * 1024 * 1024,
 		threads:         threads,
 		transferTimeout: transferTimeout,
