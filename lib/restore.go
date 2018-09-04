@@ -1,8 +1,8 @@
 package pitreos
 
 import (
-	"crypto/sha256"
 	"fmt"
+	"golang.org/x/crypto/sha3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -111,9 +111,9 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("- Chunk %d/%d invalid, downloading sha256 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA, numBytes)
+				log.Printf("- Chunk %d/%d invalid, downloading sha3 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA, numBytes)
 			} else {
-				readSHASum := sha256.Sum256(partBuffer)
+				readSHASum := sha3.Sum256(partBuffer)
 				shasum := fmt.Sprintf("%x", readSHASum)
 				if shasum == chunkMeta.ContentSHA {
 					counterLock.Lock()
@@ -121,7 +121,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 					counterLock.Unlock()
 					return nil
 				}
-				log.Printf("- Chunk %d/%d has sha256 %q, downloading sha256 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA, numBytes)
+				log.Printf("- Chunk %d/%d has sha3 %q, downloading sha3 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA, numBytes)
 			}
 
 			//try from cache first
@@ -158,12 +158,12 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 				}
 			}
 
-			newSHASum := fmt.Sprintf("%x", sha256.Sum256(newData))
+			newSHASum := fmt.Sprintf("%x", sha3.Sum256(newData))
 			if chunkMeta.ContentSHA != newSHASum {
-				return fmt.Errorf("Invalid sha256sum from downloaded blob. Got %s, expected %s\n", newSHASum, chunkMeta.ContentSHA)
+				return fmt.Errorf("Invalid sha3sum from downloaded blob. Got %s, expected %s\n", newSHASum, chunkMeta.ContentSHA)
 			}
 
-			log.Printf("- Chunk %d/%d download finished, new sha256: %s\n", n+1, numChunks, newSHASum)
+			log.Printf("- Chunk %d/%d download finished, new sha3: %s\n", n+1, numChunks, newSHASum)
 			return f.writeChunkToFile(int64(chunkMeta.Start), newData)
 		})
 

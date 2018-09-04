@@ -1,8 +1,8 @@
 package pitreos
 
 import (
-	"crypto/sha256"
 	"fmt"
+	"golang.org/x/crypto/sha3"
 	"log"
 	"math"
 	"path/filepath"
@@ -145,7 +145,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 			if !blockIsEmpty && !skipChunk {
 				log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
-				chunkMeta.ContentSHA = fmt.Sprintf("%x", sha256.Sum256(partBuffer))
+				chunkMeta.ContentSHA = fmt.Sprintf("%x", sha3.Sum256(partBuffer))
 
 				// don't fail if caching disabled
 				if p.cacheStorage != nil {

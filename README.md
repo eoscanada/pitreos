@@ -61,7 +61,7 @@ tag: john_dev
 ## Backup to default location
 
 ```pitreos backup ./mydata```
-* This will send your chunks to $HOME/.pitreos/backups/chunks/{sha256sum}
+* This will send your chunks to $HOME/.pitreos/backups/chunks/{sha3_256sum}
 * This will send your backup index to $HOME/.pitreos/backups/indexes/{timestamp}-default.yaml.gz
 
 ## Backup to Google Storage
