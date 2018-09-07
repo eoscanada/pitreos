@@ -1,8 +1,10 @@
 # pitreos: Point in Time Recovery Tool by EOS Canada
 _Pronounced like "Patriots"_
 
-Backup and restore tool optimized for large files that don't change much
-Perfect for EOS state and block.log, or virtual machine images
+Backup and restore tool optimized for large sparse files and append-only files.
+
+Perfect for EOS.IO blockchains' `state` and `blocks` logs, virtual
+machine images or other large files that change only in part.
 
 <p align="center">
   <img src="https://eoscanada.github.io/terminal/pitreos_term.svg">
@@ -23,7 +25,7 @@ Perfect for EOS state and block.log, or virtual machine images
 ## Restoring
 1. The "list" command will fetch the last backups from your defined storage URL
 2. The "restore" command will fetch the backup index chosen chosen from the list. (Alternatively, you can ask pitreos to restore to the latest backup of a specific tag)
-3. The backup index is parsed: it contains the list of files and their content based on their chunk hashes. 
+3. The backup index is parsed: it contains the list of files and their content based on their chunk hashes.
 4. Each non-existing local file is created as an empty sparse file with the expected length, while existing files are truncated (or enlarged) to the expected length
 5. Local chunks are hashed and compared to the expected chunk.
 6. Chunks which should be empty get a hole punched through them (becoming a sparse file)
@@ -87,4 +89,3 @@ tag: john_dev
 
 ## More examples in help !
 Run "pitreos help", "pitreos help backup" and "pitreos help restore" for more examples
-
