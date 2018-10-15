@@ -30,6 +30,7 @@ func getPITR(storageURL string) *pitreos.PITR {
 	pitr.AppendonlyFiles = appendonlyFiles
 
 	if viper.GetBool("enable-caching") {
+		fmt.Println("Cache enabled")
 		cacheURL, err := url.Parse(viper.GetString("cache-dir"))
 		errorCheck("--cache-storage path invalid", err)
 
