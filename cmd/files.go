@@ -9,19 +9,26 @@ import (
 )
 
 var filesCmd = &cobra.Command{
-	Use:   "files [tag|backup name]",
+	Use:   "files [tag|backup name] <filter>",
 	Short: "Lists available files in the specified backup on the selected storage",
 	Example: `
   pitreos files 2018-08-28-18-15-45--default
 `,
 	Long: `List available files in the closest available backup before
-the requested timestamp (default: now).`,
-	Args: cobra.ExactArgs(1),
+the requested timestamp (default: now).
+
+Optionally specify a 'filter' argument to only show files matching the filter arguments.`,
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pitr := getPITR(viper.GetString("store"))
 
 		backupName := args[0]
+		filter := ""
+
+		if len(args) > 1 {
+			filter = args[1]
+		}
 
 		if !strings.Contains(backupName, "--") {
 			lastBackup, err := pitr.GetLatestBackup(backupName)
@@ -34,7 +41,7 @@ the requested timestamp (default: now).`,
 			backupName = lastBackup
 		}
 
-		err := pitr.ListBackupFiles(backupName)
+		err := pitr.ListBackupFiles(backupName, filter)
 		errorCheck("listing backup's files", err)
 	},
 }
