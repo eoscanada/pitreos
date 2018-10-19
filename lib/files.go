@@ -25,14 +25,22 @@ func (p *PITR) ListBackupFiles(backupName string, filter string) error {
 	}
 
 	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 5, 5, 1, '\t', tabwriter.AlignRight)
+	w.Init(os.Stdout, 23, 0, 3, ' ', 0)
+
+	fmt.Fprintln(w, "size\testimated disk size\tname")
 
 	for _, file := range bm.Files {
 		if !filterRegex.MatchString(file.FileName) {
 			continue
 		}
 
-		fmt.Fprintf(w, "%s\t%s\n", humanize.Bytes(uint64(file.TotalSize)), file.FileName)
+		size := uint64(file.TotalSize)
+		estimatedDiskSize, err := bm.ComputeFileEstimatedDiskSize(file.FileName)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\n", humanize.Bytes(size), humanize.Bytes(estimatedDiskSize), file.FileName)
 		w.Flush()
 	}
 

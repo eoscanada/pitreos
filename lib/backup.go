@@ -2,12 +2,13 @@ package pitreos
 
 import (
 	"fmt"
-	"golang.org/x/crypto/sha3"
 	"log"
 	"math"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/sha3"
 
 	"github.com/abourget/llerrgroup"
 	"github.com/ghodss/yaml"
@@ -73,7 +74,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		previousBackup, err := p.GetLatestBackup(tag)
 		if err == nil && len(previousBackup) > 0 {
 			previousBM, err := p.downloadBackupIndex(previousBackup)
-			fmt.Printf("filemeta version from previous is: %s and we want \n", previousBM.Version, p.filemetaVersion)
+			fmt.Printf("filemeta version from previous is: %s and we want %s\n", previousBM.Version, p.filemetaVersion)
 			if err == nil && previousBM != nil && previousBM.Version == p.filemetaVersion && previousBM.ChunkSize == p.chunkSize {
 				for _, pf := range previousBM.Files {
 					if pf.FileName == fileMeta.FileName {
