@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}) error {
+func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}, filter string) error {
 	now := time.Now()
 	backupName := makeBackupName(now, tag)
 	bm := &BackupIndex{
@@ -24,12 +25,23 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		Meta:      metadata,
 	}
 
+	filterRegex, err := regexp.Compile(filter)
+	if err != nil {
+		return err
+	}
+
 	dirs, err := getDirFiles(source)
 	for _, filePath := range dirs {
 		relName, err := filepath.Rel(source, filePath)
 		if err != nil {
 			return err
 		}
+
+		if !filterRegex.MatchString(relName) {
+			continue
+		}
+
+		fmt.Printf("Uploading file %q\n", relName)
 
 		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, now, tag)
 		if err != nil {

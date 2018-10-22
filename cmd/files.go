@@ -17,7 +17,8 @@ var filesCmd = &cobra.Command{
 	Long: `List available files in the closest available backup before
 the requested timestamp (default: now).
 
-Optionally specify a 'filter' argument to only show files matching the filter arguments.`,
+Optionally specify a 'filter' argument to only show files matching the filter arguments.
+The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when provided.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 

@@ -22,7 +22,8 @@ the requested timestamp (default: now).
 It compares existing chunks of data in your files and downloads only the necessary data.
 This is optimized for large and sparse files, like virtual machines disks or nodeos state.
 
-Optionally specify a 'filter' argument to only download files matching the filter arguments.`,
+Optionally specify a 'filter' argument to only download files matching the filter arguments.
+The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when provided.`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
