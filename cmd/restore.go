@@ -11,7 +11,7 @@ import (
 var timestampString string
 
 var restoreCmd = &cobra.Command{
-	Use:   "restore [tag|backup name] {destination path}",
+	Use:   "restore [tag|backup name] {destination path} <filter>",
 	Short: "Restores your files to a specified point in time (default: latest available)",
 	Example: `
   pitreos restore 2018-08-28-18-15-45--default ../mydata -c
@@ -20,14 +20,22 @@ var restoreCmd = &cobra.Command{
 	Long: `Restores your files to the closest available backup before
 the requested timestamp (default: now).
 It compares existing chunks of data in your files and downloads only the necessary data.
-This is optimized for large and sparse files, like virtual machines disks or nodeos state.`,
-	Args: cobra.ExactArgs(2),
+This is optimized for large and sparse files, like virtual machines disks or nodeos state.
+
+Optionally specify a 'filter' argument to only download files matching the filter arguments.
+The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when provided.`,
+	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pitr := getPITR(viper.GetString("store"))
 
 		backupName := args[0]
 		destPath := args[1]
+		filter := ""
+
+		if len(args) > 2 {
+			filter = args[2]
+		}
 
 		if !strings.Contains(args[0], "--") {
 			lastBackup, err := pitr.GetLatestBackup(backupName)
@@ -40,9 +48,8 @@ This is optimized for large and sparse files, like virtual machines disks or nod
 			backupName = lastBackup
 		}
 
-		err := pitr.RestoreFromBackup(destPath, backupName)
+		err := pitr.RestoreFromBackup(destPath, backupName, filter)
 		errorCheck("restoring from backup", err)
-
 	},
 }
 

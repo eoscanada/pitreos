@@ -1,6 +1,7 @@
 package pitreos
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -30,4 +31,49 @@ type ChunkDef struct {
 type ListableBackup struct {
 	Name string
 	Meta map[string]interface{}
+}
+
+func (backup *BackupIndex) ComputeFileEstimatedDiskSize(filename string) (uint64, error) {
+	fileIndex, err := backup.findFileIndex(filename)
+	if err != nil {
+		return 0, err
+	}
+
+	estimatedDiskSize := uint64(0)
+	for _, chunk := range fileIndex.Chunks {
+		if chunk.IsEmpty {
+			continue
+		}
+
+		estimatedDiskSize += uint64(chunk.End - chunk.Start)
+	}
+
+	return estimatedDiskSize, nil
+}
+
+func (backupIndex *BackupIndex) FindFilesMatching(filter string) ([]*FileIndex, error) {
+	var matchingFiles []*FileIndex
+
+	filterRegex, err := CompilerFilterToRegexp(filter)
+	if err != nil {
+		return matchingFiles, err
+	}
+
+	for _, file := range backupIndex.Files {
+		if filterRegex.MatchString(file.FileName) {
+			matchingFiles = append(matchingFiles, file)
+		}
+	}
+
+	return matchingFiles, nil
+}
+
+func (backup *BackupIndex) findFileIndex(filename string) (*FileIndex, error) {
+	for _, file := range backup.Files {
+		if file.FileName == filename {
+			return file, nil
+		}
+	}
+
+	return nil, fmt.Errorf("file %q not found in backup index", filename)
 }

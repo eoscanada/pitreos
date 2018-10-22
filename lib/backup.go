@@ -2,18 +2,19 @@ package pitreos
 
 import (
 	"fmt"
-	"golang.org/x/crypto/sha3"
 	"log"
 	"math"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/abourget/llerrgroup"
 	"github.com/ghodss/yaml"
 )
 
-func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}) error {
+func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}, filter string) error {
 	now := time.Now()
 	backupName := makeBackupName(now, tag)
 	bm := &BackupIndex{
@@ -23,11 +24,20 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		Meta:      metadata,
 	}
 
+	filterRegex, err := CompilerFilterToRegexp(filter)
+	if err != nil {
+		return err
+	}
+
 	dirs, err := getDirFiles(source)
 	for _, filePath := range dirs {
 		relName, err := filepath.Rel(source, filePath)
 		if err != nil {
 			return err
+		}
+
+		if !filterRegex.MatchString(relName) {
+			continue
 		}
 
 		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, now, tag)
@@ -73,7 +83,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		previousBackup, err := p.GetLatestBackup(tag)
 		if err == nil && len(previousBackup) > 0 {
 			previousBM, err := p.downloadBackupIndex(previousBackup)
-			fmt.Printf("filemeta version from previous is: %s and we want \n", previousBM.Version, p.filemetaVersion)
+			fmt.Printf("filemeta version from previous is: %s and we want %s\n", previousBM.Version, p.filemetaVersion)
 			if err == nil && previousBM != nil && previousBM.Version == p.filemetaVersion && previousBM.ChunkSize == p.chunkSize {
 				for _, pf := range previousBM.Files {
 					if pf.FileName == fileMeta.FileName {

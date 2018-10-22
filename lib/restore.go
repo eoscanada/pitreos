@@ -2,7 +2,6 @@ package pitreos
 
 import (
 	"fmt"
-	"golang.org/x/crypto/sha3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -11,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/abourget/llerrgroup"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/ghodss/yaml"
@@ -18,7 +19,7 @@ import (
 
 var counterLock sync.Mutex
 
-func (p *PITR) RestoreFromBackup(dest string, backupName string) error {
+func (p *PITR) RestoreFromBackup(dest string, backupName string, filter string) error {
 	bm, err := p.downloadBackupIndex(backupName)
 	if err != nil {
 		return err
@@ -28,7 +29,12 @@ func (p *PITR) RestoreFromBackup(dest string, backupName string) error {
 		return fmt.Errorf("Incompatible version of backupIndex. Expected: %s, found: %s.", p.filemetaVersion, bm.Version)
 	}
 
-	for _, file := range bm.Files {
+	matchingFiles, err := bm.FindFilesMatching(filter)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range matchingFiles {
 		err := p.downloadFileFromChunks(file, dest)
 		if err != nil {
 			return fmt.Errorf("retrieve chunk %q: %s", file.FileName, err)
