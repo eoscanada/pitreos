@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sync"
 
 	"golang.org/x/crypto/sha3"
@@ -30,16 +29,12 @@ func (p *PITR) RestoreFromBackup(dest string, backupName string, filter string) 
 		return fmt.Errorf("Incompatible version of backupIndex. Expected: %s, found: %s.", p.filemetaVersion, bm.Version)
 	}
 
-	filterRegex, err := regexp.Compile(filter)
+	matchingFiles, err := bm.FindFilesMatching(filter)
 	if err != nil {
 		return err
 	}
 
-	for _, file := range bm.Files {
-		if !filterRegex.MatchString(file.FileName) {
-			continue
-		}
-
+	for _, file := range matchingFiles {
 		err := p.downloadFileFromChunks(file, dest)
 		if err != nil {
 			return fmt.Errorf("retrieve chunk %q: %s", file.FileName, err)

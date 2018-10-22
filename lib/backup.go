@@ -5,7 +5,6 @@ import (
 	"log"
 	"math"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -25,7 +24,7 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		Meta:      metadata,
 	}
 
-	filterRegex, err := regexp.Compile(filter)
+	filterRegex, err := CompilerFilterToRegexp(filter)
 	if err != nil {
 		return err
 	}
@@ -40,8 +39,6 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		if !filterRegex.MatchString(relName) {
 			continue
 		}
-
-		fmt.Printf("Uploading file %q\n", relName)
 
 		fileMeta, err := p.uploadFileToGSChunks(filePath, relName, now, tag)
 		if err != nil {

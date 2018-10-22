@@ -19,21 +19,17 @@ func (p *PITR) ListBackupFiles(backupName string, filter string) error {
 		return fmt.Errorf("Incompatible version of backupIndex. Expected: %s, found: %s.", p.filemetaVersion, bm.Version)
 	}
 
-	filterRegex, err := regexp.Compile(filter)
-	if err != nil {
-		return err
-	}
-
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 23, 0, 3, ' ', 0)
 
 	fmt.Fprintln(w, "size\testimated disk size\tname")
 
-	for _, file := range bm.Files {
-		if !filterRegex.MatchString(file.FileName) {
-			continue
-		}
+	matchingFiles, err := bm.FindFilesMatching(filter)
+	if err != nil {
+		return err
+	}
 
+	for _, file := range matchingFiles {
 		size := uint64(file.TotalSize)
 		estimatedDiskSize, err := bm.ComputeFileEstimatedDiskSize(file.FileName)
 		if err != nil {
@@ -45,4 +41,8 @@ func (p *PITR) ListBackupFiles(backupName string, filter string) error {
 	}
 
 	return nil
+}
+
+func CompilerFilterToRegexp(filter string) (*regexp.Regexp, error) {
+	return regexp.Compile(filter)
 }

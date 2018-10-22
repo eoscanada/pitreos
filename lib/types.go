@@ -51,6 +51,23 @@ func (backup *BackupIndex) ComputeFileEstimatedDiskSize(filename string) (uint64
 	return estimatedDiskSize, nil
 }
 
+func (backupIndex *BackupIndex) FindFilesMatching(filter string) ([]*FileIndex, error) {
+	var matchingFiles []*FileIndex
+
+	filterRegex, err := CompilerFilterToRegexp(filter)
+	if err != nil {
+		return matchingFiles, err
+	}
+
+	for _, file := range backupIndex.Files {
+		if filterRegex.MatchString(file.FileName) {
+			matchingFiles = append(matchingFiles, file)
+		}
+	}
+
+	return matchingFiles, nil
+}
+
 func (backup *BackupIndex) findFileIndex(filename string) (*FileIndex, error) {
 	for _, file := range backup.Files {
 		if file.FileName == filename {
