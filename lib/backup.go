@@ -176,20 +176,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 					alreadyBackedupChunks++
 					counterLock.Unlock()
 				} else {
-					writeChan := make(chan error, 1)
-					go func() {
-						writeChan <- p.storage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
-					}()
-					select {
-					case err := <-writeChan:
-						if err != nil {
-							return err
-						}
-
-					case <-time.After(p.transferTimeout):
-						return fmt.Errorf("Upload of chunk %q to storage timed out", chunkMeta.ContentSHA)
-					}
-
+					err := p.storage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
 						return err
 					}

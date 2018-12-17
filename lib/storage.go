@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
@@ -28,6 +29,7 @@ type Storage interface {
 	OpenChunk(hash string) (io.ReadCloser, error)
 	WriteChunk(hash string, content []byte) error
 	ChunkExists(hash string) (bool, error)
+	SetTimeout(timeout time.Duration)
 }
 
 func SetupStorage(baseURL string) (Storage, error) {
@@ -53,6 +55,7 @@ type GSStorage struct {
 	baseURL *url.URL
 	client  *storage.Client
 	context context.Context
+	timeout time.Duration
 }
 
 func NewGSStorage(baseURL *url.URL) (*GSStorage, error) {
@@ -63,17 +66,22 @@ func NewGSStorage(baseURL *url.URL) (*GSStorage, error) {
 	}
 
 	return &GSStorage{
+		timeout: time.Minute * 30,
 		baseURL: baseURL,
 		client:  client,
 		context: ctx,
 	}, nil
 }
 
+func (s *GSStorage) SetTimeout(timeout time.Duration) {
+	s.timeout = timeout
+}
+
 func (s *GSStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
 	slashLocation := strings.TrimSuffix(s.indexPath(prefix), ".yaml.gz") // ex: /myapp/v1/indexes/2018-*
 	location := strings.TrimPrefix(slashLocation, "/")                   // GS does not want "/" in prefix filter
 
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
 	iter := s.client.Bucket(s.baseURL.Host).Objects(ctx, &storage.Query{Prefix: location})
 
 	var chronoOut []string
@@ -123,7 +131,7 @@ func (s *GSStorage) WriteBackupIndex(name string, content []byte) (err error) {
 }
 
 func (s *GSStorage) putObject(location string, content []byte) (err error) {
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
 	w := s.client.Bucket(s.baseURL.Host).Object(location).NewWriter(ctx)
 	defer w.Close()
 	w.ContentType = "application/octet-stream"
@@ -140,7 +148,7 @@ func (s *GSStorage) putObject(location string, content []byte) (err error) {
 }
 
 func (s *GSStorage) getObject(location string) (out io.ReadCloser, err error) {
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
 	r, err := s.client.Bucket(s.baseURL.Host).Object(location).NewReader(ctx)
 	if err != nil {
 		return nil, err
@@ -159,7 +167,7 @@ func (s *GSStorage) OpenChunk(hash string) (out io.ReadCloser, err error) {
 
 func (s *GSStorage) ChunkExists(hash string) (bool, error) {
 	location := s.chunkPath(hash)
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
 	_, err := s.client.Bucket(s.baseURL.Host).Object(location).Attrs(ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
@@ -201,6 +209,10 @@ func NewFSStorage(baseURL *url.URL) (out *FSStorage, err error) {
 	return &FSStorage{
 		baseURL: baseURL,
 	}, nil
+}
+
+func (s *FSStorage) SetTimeout(timeout time.Duration) {
+	log.Println("ignoring SetTimeout on FSStorage")
 }
 
 func (s *FSStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
@@ -345,6 +357,10 @@ func (s *HTTPStorage) WriteBackupIndex(name string, content []byte) (err error) 
 
 func (s *HTTPStorage) putObject(location string, content []byte) (err error) {
 	return fmt.Errorf("http storage doesn't implement backup, only restores")
+}
+
+func (s *HTTPStorage) SetTimeout(timeout time.Duration) {
+	s.Client.Timeout = timeout
 }
 
 func (s *HTTPStorage) getObject(location string) (out io.ReadCloser, err error) {
