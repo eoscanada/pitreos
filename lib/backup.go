@@ -105,6 +105,12 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 	// setup chunk metadata reader to populate fileMeta
 	done := make(chan bool)
 	chunkCh := make(chan *ChunkDef, 1000)
+	cleanup := func() {
+		fmt.Println("Pitreos: Cleaning up...")
+		close(chunkCh)
+		<-done
+	}
+
 	go func() {
 		for chunk := range chunkCh {
 			fileMeta.Chunks = append(fileMeta.Chunks, chunk)
@@ -119,6 +125,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 	eg := llerrgroup.New(p.threads)
 	for i := int64(0); i < totalPartsNum; i++ {
 		if eg.Stop() {
+			cleanup()
 			return nil, fmt.Errorf("One of the threads failed. Stopping.")
 		}
 
@@ -145,7 +152,10 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
 			if err != nil {
-				return fmt.Errorf("get chunk contents: %s", err)
+				errmsg := fmt.Errorf("get chunk contents: %s", err)
+				fmt.Println(errmsg)
+				return errmsg
+
 			}
 
 			chunkMeta.IsEmpty = blockIsEmpty
@@ -163,13 +173,17 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				if p.cacheStorage != nil {
 					err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
-						return err
+						errmsg := fmt.Errorf("cachestorage writechunk: %s", err)
+						fmt.Println(errmsg)
+						return errmsg
 					}
 				}
 
 				exists, err := p.storage.ChunkExists(chunkMeta.ContentSHA)
 				if err != nil {
-					return err
+					errmsg := fmt.Errorf("chunkexists: %s", err)
+					fmt.Println(errmsg)
+					return errmsg
 				}
 				if exists {
 					counterLock.Lock()
@@ -178,7 +192,9 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				} else {
 					err := p.storage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
-						return err
+						errmsg := fmt.Errorf("writechunk: %s", err)
+						fmt.Println(errmsg)
+						return errmsg
 					}
 				}
 			}
@@ -190,9 +206,8 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 	}
 
-	//json.NewEncoder(os.Stdout).Encode(fileMeta)
-
 	if err := eg.Wait(); err != nil {
+		cleanup()
 		log.Fatalln(err)
 	}
 
@@ -205,9 +220,8 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 	if emptyChunks != 0 {
 		log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
 	}
-	close(chunkCh)
-	<-done
 
+	cleanup()
 	return fileMeta, nil
 
 }
