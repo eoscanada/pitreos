@@ -2,7 +2,6 @@ package pitreos
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"path/filepath"
 	"strings"
@@ -208,7 +207,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 	if err := eg.Wait(); err != nil {
 		cleanup()
-		log.Fatalln(err)
+		zlog.Fatal("waiting for tasks completion", zap.Error(err))
 	}
 
 	if alreadyBackedupChunks > 0 {
