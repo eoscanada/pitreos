@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/abourget/llerrgroup"
@@ -53,7 +54,7 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		return fmt.Errorf("upload backup index: %s", err)
 	}
 
-	log.Println("Backup index uploaded:", backupName)
+	zlog.Debug("backup index uploaded", zap.String("backup_name", backupName))
 
 	return nil
 }
@@ -83,7 +84,7 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 		previousBackup, err := p.GetLatestBackup(tag)
 		if err == nil && len(previousBackup) > 0 {
 			previousBM, err := p.downloadBackupIndex(previousBackup)
-			fmt.Printf("filemeta version from previous is: %s and we want %s\n", previousBM.Version, p.filemetaVersion)
+			zlog.Debug("previous backup index", zap.String("version", previousBM.Version), zap.String("filemeta_version", p.filemetaVersion))
 			if err == nil && previousBM != nil && previousBM.Version == p.filemetaVersion && previousBM.ChunkSize == p.chunkSize {
 				for _, pf := range previousBM.Files {
 					if pf.FileName == fileMeta.FileName {
@@ -100,13 +101,13 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 
 	}
 
-	log.Printf("Splitting %s to %d pieces.\n", relFileName, totalPartsNum)
+	zlog.Debug("splitting to pieces", zap.String("relative_file_name", relFileName), zap.Int64("total_parts_num", totalPartsNum))
 
 	// setup chunk metadata reader to populate fileMeta
 	done := make(chan bool)
 	chunkCh := make(chan *ChunkDef, 1000)
 	cleanup := func() {
-		fmt.Println("Pitreos: Cleaning up...")
+		zlog.Debug("cleaning up")
 		close(chunkCh)
 		<-done
 	}
@@ -153,36 +154,35 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 			partBuffer, blockIsEmpty, err := f.getLocalChunk(chunkMeta.Start, partSize)
 			if err != nil {
 				errmsg := fmt.Errorf("get chunk contents: %s", err)
-				fmt.Println(errmsg)
+				zlog.Error("get chunk contents", zap.Error(errmsg))
 				return errmsg
-
 			}
 
 			chunkMeta.IsEmpty = blockIsEmpty
 			if blockIsEmpty {
 				counterLock.Lock()
-				emptyChunks += 1
+				emptyChunks++
 				counterLock.Unlock()
 			}
 
 			if !blockIsEmpty && !skipChunk {
-				log.Printf("Processing part %d of %d ###\n", partnum+1, totalPartsNum)
+				zlog.Info("processing part", zap.Int64("part_num", partnum+1), zap.Int64("total_parts_num", totalPartsNum))
 				chunkMeta.ContentSHA = fmt.Sprintf("%x", sha3.Sum256(partBuffer))
 
 				// don't fail if caching disabled
 				if p.cacheStorage != nil {
 					err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
-						errmsg := fmt.Errorf("cachestorage writechunk: %s", err)
-						fmt.Println(errmsg)
+						errmsg := fmt.Errorf("cache storage writechunk: %s", err)
+						zlog.Error("cache storage write chunk", zap.Error(errmsg))
 						return errmsg
 					}
 				}
 
 				exists, err := p.storage.ChunkExists(chunkMeta.ContentSHA)
 				if err != nil {
-					errmsg := fmt.Errorf("chunkexists: %s", err)
-					fmt.Println(errmsg)
+					errmsg := fmt.Errorf("chunk exists: %s", err)
+					zlog.Error("chunk exists", zap.Error(errmsg))
 					return errmsg
 				}
 				if exists {
@@ -192,8 +192,8 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 				} else {
 					err := p.storage.WriteChunk(chunkMeta.ContentSHA, partBuffer)
 					if err != nil {
-						errmsg := fmt.Errorf("writechunk: %s", err)
-						fmt.Println(errmsg)
+						errmsg := fmt.Errorf("write chunk: %s", err)
+						zlog.Error("write chunk", zap.Error(errmsg))
 						return errmsg
 					}
 				}
@@ -212,13 +212,27 @@ func (p *PITR) uploadFileToGSChunks(localFile, relFileName string, timestamp tim
 	}
 
 	if alreadyBackedupChunks > 0 {
-		log.Printf("- %d/%d chunks were already present in backup store %s.\n", alreadyBackedupChunks, totalPartsNum, fileMeta.FileName)
+		zlog.Debug("already backed up chunks",
+			zap.Int("already_backed_up_chunk_count", alreadyBackedupChunks),
+			zap.Int64("total_parts_num", totalPartsNum),
+			zap.String("file_name", fileMeta.FileName),
+		)
 	}
+
 	if skippedChunks > 0 {
-		log.Printf("- %d/%d chunks were not verified on this appendonly file %s.\n", skippedChunks, totalPartsNum, fileMeta.FileName)
+		zlog.Debug("skipped chunks",
+			zap.Int("skipped_chunk_count", skippedChunks),
+			zap.Int64("total_parts_num", totalPartsNum),
+			zap.String("file_name", fileMeta.FileName),
+		)
 	}
+
 	if emptyChunks != 0 {
-		log.Printf("- %d of %d chunks were empty and ignored", emptyChunks, totalPartsNum)
+		zlog.Debug("empty chunks",
+			zap.Int("empty_chunk_count", emptyChunks),
+			zap.Int64("total_parts_num", totalPartsNum),
+			zap.String("file_name", fileMeta.FileName),
+		)
 	}
 
 	cleanup()
