@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 )
@@ -96,7 +96,7 @@ func (s *GSStorage) ListBackups(limit int, offset int, prefix string) (out []str
 
 		name := objAttrs.Name
 		if !strings.HasSuffix(name, ".yaml.gz") {
-			log.Printf("ignoring file: %s with wrong suffix", name)
+			zlog.Warn("ignoring file with wrong suffix", zap.String("name", name))
 			break // ignore any non-yaml.gz file
 		}
 
@@ -212,7 +212,7 @@ func NewFSStorage(baseURL *url.URL) (out *FSStorage, err error) {
 }
 
 func (s *FSStorage) SetTimeout(timeout time.Duration) {
-	log.Println("ignoring SetTimeout on FSStorage")
+	zlog.Debug("ignoring set timeout on fsstorage")
 }
 
 func (s *FSStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {

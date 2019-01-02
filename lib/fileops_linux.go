@@ -2,7 +2,6 @@ package pitreos
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -92,7 +91,7 @@ func (f *FileOps) hasDataInRange(startIndex, size int64) bool {
 	if f.extentsLoaded == false {
 		exts, err := f.getSparseFileExtents()
 		if err != nil {
-			log.Printf("SPARSE CHECK: cannot optimize based on sparse file readout")
+			zlog.Warn("sparse check, cannot optimize based on sparse file readout")
 		}
 		f.extents = exts
 		f.extentsLoaded = true

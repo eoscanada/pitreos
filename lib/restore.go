@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"sync"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/abourget/llerrgroup"
@@ -45,7 +45,12 @@ func (p *PITR) RestoreFromBackup(dest string, backupName string, filter string) 
 }
 
 func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
-	log.Printf("Restoring file %q with size %s from snapshot dated %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)), fm.Date)
+	zlog.Info("restoring file with size from snapshot",
+		zap.String("file_name", fm.FileName),
+		zap.String("bytes", humanize.Bytes(uint64(fm.TotalSize))),
+		zap.Time("date", fm.Date),
+	)
+
 	filePath := filepath.Join(localFolder, fm.FileName)
 
 	err := os.MkdirAll(path.Dir(filePath), 0755)
@@ -73,7 +78,11 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 		return err
 	}
 	if f.isAppendOnly && f.originalSize >= fm.TotalSize {
-		log.Printf("- File %s treated as 'appendonly'. Got truncated to %s\n", fm.FileName, humanize.Bytes(uint64(fm.TotalSize)))
+		zlog.Info("file treated as 'appendonly'",
+			zap.String("file_name", fm.FileName),
+			zap.String("truncated_to", humanize.Bytes(uint64(fm.TotalSize))),
+		)
+
 		return nil
 	}
 
@@ -111,7 +120,7 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 			}
 
 			if !localChunkEmpty && chunkMeta.IsEmpty {
-				log.Printf("- Chunk %d/%d punching a hole (empty chunk)", n+1, numChunks)
+				zlog.Debug("punching a hole (empty chunk)", zap.Int("chunk_index", n+1), zap.Int("num_chunks", numChunks))
 				err := f.wipeChunk(chunkMeta.Start, chunkMeta.End-chunkMeta.Start+1)
 				if err != nil {
 					return err
@@ -121,7 +130,12 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			numBytes := humanize.Bytes(uint64(chunkMeta.End - chunkMeta.Start - 1))
 			if localChunkEmpty && !chunkMeta.IsEmpty {
-				log.Printf("- Chunk %d/%d invalid, downloading sha3 %q (%s)", n+1, numChunks, chunkMeta.ContentSHA, numBytes)
+				zlog.Info("chunk invalid",
+					zap.Int("chunk_index", n+1),
+					zap.Int("num_chunks", numChunks),
+					zap.Any("sha3_sum", chunkMeta.ContentSHA),
+					zap.Any("num_bytes", numBytes),
+				)
 			} else {
 				readSHASum := sha3.Sum256(partBuffer)
 				shasum := fmt.Sprintf("%x", readSHASum)
@@ -131,7 +145,14 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 					counterLock.Unlock()
 					return nil
 				}
-				log.Printf("- Chunk %d/%d has sha3 %q, downloading sha3 %q (%s)", n+1, numChunks, shasum, chunkMeta.ContentSHA, numBytes)
+
+				zlog.Debug("chunk valid",
+					zap.Int("chunk_index", n+1),
+					zap.Int("num_chunks", numChunks),
+					zap.Any("sha3_sum", shasum),
+					zap.Any("chunk_meta_content_sha", chunkMeta.ContentSHA),
+					zap.Any("num_bytes", numBytes),
+				)
 			}
 
 			//try from cache first
@@ -170,10 +191,15 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 
 			newSHASum := fmt.Sprintf("%x", sha3.Sum256(newData))
 			if chunkMeta.ContentSHA != newSHASum {
-				return fmt.Errorf("Invalid sha3sum from downloaded blob. Got %s, expected %s\n", newSHASum, chunkMeta.ContentSHA)
+				return fmt.Errorf("invalid sha3sum from downloaded blob, got %s, expected %s", newSHASum, chunkMeta.ContentSHA)
 			}
 
-			log.Printf("- Chunk %d/%d download finished, new sha3: %s\n", n+1, numChunks, newSHASum)
+			zlog.Debug("chunk download finished",
+				zap.Int("chunk_index", n+1),
+				zap.Any("num_chunks", numChunks),
+				zap.Any("new_sha3_sum", newSHASum),
+			)
+
 			return f.writeChunkToFile(int64(chunkMeta.Start), newData)
 		})
 
@@ -183,14 +209,29 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 	}
 
 	if skippedChunks > 0 {
-		log.Printf("- %d/%d chunks were not verified on this appendonly file %s.\n", skippedChunks, numChunks, fm.FileName)
+		zlog.Debug("skipped chunks",
+			zap.Any("skipped_chunk_count", skippedChunks),
+			zap.Any("total_chunk_count", numChunks),
+			zap.Any("file_name", fm.FileName),
+		)
 	}
+
 	if correctChunks > 0 {
-		log.Printf("- %d/%d chunks were already correct. on file %s\n", correctChunks, numChunks, fm.FileName)
+		zlog.Debug("correct chunks",
+			zap.Any("correct_chunk_count", correctChunks),
+			zap.Any("total_chunk_count", numChunks),
+			zap.Any("file_name", fm.FileName),
+		)
 	}
+
 	if emptyChunks > 0 {
-		log.Printf("- %d/%d chunks were left empty. on file %s\n", emptyChunks, numChunks, fm.FileName)
+		zlog.Debug("empty chunks",
+			zap.Any("empty_chunk_count", emptyChunks),
+			zap.Any("total_chunk_count", numChunks),
+			zap.Any("file_name", fm.FileName),
+		)
 	}
+
 	return nil
 }
 
