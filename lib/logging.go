@@ -6,6 +6,6 @@ import (
 
 var zlog = zap.NewNop()
 
-func SetLogger(l *zap.Logger) {
-	zlog = l
+func SetLogger(logger *zap.Logger) {
+	zlog = logger
 }
