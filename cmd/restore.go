@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	pitreos "github.com/eoscanada/pitreos/lib"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -31,11 +32,14 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 
 		backupName := args[0]
 		destPath := args[1]
-		filter := ""
+		stringFilter := ""
 
 		if len(args) > 2 {
-			filter = args[2]
+			stringFilter = args[2]
 		}
+
+		filter, err := pitreos.NewIncludeThanExcludeFilter(stringFilter, "")
+		errorCheck("unable to create include filter", err)
 
 		if !strings.Contains(args[0], "--") {
 			lastBackup, err := pitr.GetLatestBackup(backupName)
@@ -48,7 +52,7 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 			backupName = lastBackup
 		}
 
-		err := pitr.RestoreFromBackup(destPath, backupName, filter)
+		err = pitr.RestoreFromBackup(destPath, backupName, filter)
 		errorCheck("restoring from backup", err)
 	},
 }

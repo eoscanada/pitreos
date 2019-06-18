@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 
+	pitreos "github.com/eoscanada/pitreos/lib"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -35,10 +36,13 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 
 		pitr := getPITR(viper.GetString("store"))
 
-		filter := ""
+		stringFilter := ""
 		if len(args) > 1 {
-			filter = args[1]
+			stringFilter = args[1]
 		}
+
+		filter, err := pitreos.NewIncludeThanExcludeFilter(stringFilter, "")
+		errorCheck("unable to create include filter", err)
 
 		err = pitr.GenerateBackup(args[0], viper.GetString("tag"), metadata, filter)
 		errorCheck("storing backup", err)

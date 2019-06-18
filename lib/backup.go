@@ -14,7 +14,7 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}, filter string) error {
+func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]interface{}, filter Filter) error {
 	now := time.Now()
 	backupName := makeBackupName(now, tag)
 	bm := &BackupIndex{
@@ -24,11 +24,6 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 		Meta:      metadata,
 	}
 
-	filterRegex, err := CompilerFilterToRegexp(filter)
-	if err != nil {
-		return err
-	}
-
 	dirs, err := getDirFiles(source)
 	for _, filePath := range dirs {
 		relName, err := filepath.Rel(source, filePath)
@@ -36,7 +31,7 @@ func (p *PITR) GenerateBackup(source string, tag string, metadata map[string]int
 			return err
 		}
 
-		if !filterRegex.MatchString(relName) {
+		if !filter.Match(relName) {
 			continue
 		}
 

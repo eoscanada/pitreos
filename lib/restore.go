@@ -19,14 +19,14 @@ import (
 
 var counterLock sync.Mutex
 
-func (p *PITR) RestoreFromBackup(dest string, backupName string, filter string) error {
+func (p *PITR) RestoreFromBackup(dest string, backupName string, filter Filter) error {
 	bm, err := p.downloadBackupIndex(backupName)
 	if err != nil {
 		return err
 	}
 
 	if bm.Version != p.filemetaVersion {
-		return fmt.Errorf("Incompatible version of backupIndex. Expected: %s, found: %s.", p.filemetaVersion, bm.Version)
+		return fmt.Errorf("incompatible version of backupIndex, expected %s got %s", p.filemetaVersion, bm.Version)
 	}
 
 	matchingFiles, err := bm.FindFilesMatching(filter)

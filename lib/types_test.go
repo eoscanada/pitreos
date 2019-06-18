@@ -24,7 +24,7 @@ func TestComputeFileEstimatedDiskSize_FileNotPresent(t *testing.T) {
 
 func TestFindFilesMatching_EmptyStringMatchAll(t *testing.T) {
 	backupIndex := createBackupIndex(t)
-	files, err := backupIndex.FindFilesMatching("")
+	files, err := backupIndex.FindFilesMatching(AllFileFilter)
 
 	assert.NoError(t, err)
 	assertMatchAllFiles(t, files)
@@ -32,24 +32,32 @@ func TestFindFilesMatching_EmptyStringMatchAll(t *testing.T) {
 
 func TestFindFilesMatching_SingleMatch(t *testing.T) {
 	backupIndex := createBackupIndex(t)
-	files, err := backupIndex.FindFilesMatching("big")
+	files, err := backupIndex.FindFilesMatching(MustNewIncludeThanExcludeFilter("big", ""))
 
 	assert.NoError(t, err)
 	assert.Len(t, files, 1, "There should be 1 matching files only")
 	assert.Equal(t, "bigfile", files[0].FileName, "Matching file should be 'bigfile'")
 }
 
-func TestFindFilesMatching_RegexWorks(t *testing.T) {
+func TestFindFilesMatching_IncludeWithRegex_Works(t *testing.T) {
 	backupIndex := createBackupIndex(t)
-	files, err := backupIndex.FindFilesMatching("big|small")
+	files, err := backupIndex.FindFilesMatching(MustNewIncludeThanExcludeFilter("big|small", ""))
 
 	assert.NoError(t, err)
 	assertMatchAllFiles(t, files)
 }
 
-func TestFindFilesMatching_RegexProblem(t *testing.T) {
+func TestFindFilesMatching_FilterWithExclude_Works(t *testing.T) {
 	backupIndex := createBackupIndex(t)
-	_, err := backupIndex.FindFilesMatching("(")
+	files, err := backupIndex.FindFilesMatching(MustNewIncludeThanExcludeFilter("file", "small"))
+
+	assert.NoError(t, err)
+	assert.Len(t, files, 1, "There should be 1 matching files only")
+	assert.Equal(t, "bigfile", files[0].FileName, "Matching file should be 'bigfile'")
+}
+
+func TestFindFilesMatching_RegexProblem(t *testing.T) {
+	_, err := NewIncludeThanExcludeFilter("(", "")
 
 	assert.EqualError(t, err, "error parsing regexp: missing closing ): `(`")
 }

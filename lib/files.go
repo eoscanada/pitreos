@@ -3,13 +3,12 @@ package pitreos
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"text/tabwriter"
 
 	"github.com/dustin/go-humanize"
 )
 
-func (p *PITR) ListBackupFiles(backupName string, filter string) error {
+func (p *PITR) ListBackupFiles(backupName string, filter Filter) error {
 	bm, err := p.downloadBackupIndex(backupName)
 	if err != nil {
 		return err
@@ -41,8 +40,4 @@ func (p *PITR) ListBackupFiles(backupName string, filter string) error {
 	}
 
 	return nil
-}
-
-func CompilerFilterToRegexp(filter string) (*regexp.Regexp, error) {
-	return regexp.Compile(filter)
 }
