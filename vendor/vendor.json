@@ -57,6 +57,12 @@
 			"revisionTime": "2016-11-18T14:57:31Z"
 		},
 		{
+			"checksumSHA1": "r898yn4KYZOHk8SYGyOHdVSkgk0=",
+			"path": "github.com/avast/retry-go",
+			"revision": "a8f6dc7e8f46a5d11c01d9da1e887bb5a51fd107",
+			"revisionTime": "2020-02-25T13:37:54Z"
+		},
+		{
 			"checksumSHA1": "dvabztWVQX8f6oMLRyv4dLH+TGY=",
 			"origin": "github.com/stretchr/testify/vendor/github.com/davecgh/go-spew/spew",
 			"path": "github.com/davecgh/go-spew/spew",

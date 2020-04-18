@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"github.com/abourget/llerrgroup"
+	"github.com/avast/retry-go"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/ghodss/yaml"
 )
@@ -155,52 +156,55 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 				)
 			}
 
-			//try from cache first
-			var openChunk io.ReadCloser
-			var inCache bool
-			if p.cacheStorage != nil {
-				// Try this first
-				found, err := p.cacheStorage.ChunkExists(chunkMeta.ContentSHA)
+			return retry.Do(func() error {
+				//try from cache first
+				var openChunk io.ReadCloser
+				var inCache bool
+				if p.cacheStorage != nil {
+					// Try this first
+					found, err := p.cacheStorage.ChunkExists(chunkMeta.ContentSHA)
+					if err != nil {
+						return err
+					}
+					if found {
+						openChunk, err = p.cacheStorage.OpenChunk(chunkMeta.ContentSHA)
+						inCache = true
+					}
+				}
+
+				if openChunk == nil {
+					openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA)
+				}
+				if err != nil {
+					return fmt.Errorf("open chunk: %s", err)
+				}
+				defer openChunk.Close()
+
+				newData, err := ioutil.ReadAll(openChunk)
 				if err != nil {
 					return err
 				}
-				if found {
-					openChunk, err = p.cacheStorage.OpenChunk(chunkMeta.ContentSHA)
-					inCache = true
+
+				if p.cacheStorage != nil && !inCache {
+					err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, newData)
+					if err != nil {
+						return err
+					}
 				}
-			}
-			if openChunk == nil {
-				openChunk, err = p.storage.OpenChunk(chunkMeta.ContentSHA)
-			}
-			if err != nil {
-				return fmt.Errorf("open chunk: %s", err)
-			}
-			defer openChunk.Close()
 
-			newData, err := ioutil.ReadAll(openChunk)
-			if err != nil {
-				return err
-			}
-
-			if p.cacheStorage != nil && !inCache {
-				err := p.cacheStorage.WriteChunk(chunkMeta.ContentSHA, newData)
-				if err != nil {
-					return err
+				newSHASum := fmt.Sprintf("%x", sha3.Sum256(newData))
+				if chunkMeta.ContentSHA != newSHASum {
+					return fmt.Errorf("invalid sha3sum from downloaded blob, got %s, expected %s", newSHASum, chunkMeta.ContentSHA)
 				}
-			}
 
-			newSHASum := fmt.Sprintf("%x", sha3.Sum256(newData))
-			if chunkMeta.ContentSHA != newSHASum {
-				return fmt.Errorf("invalid sha3sum from downloaded blob, got %s, expected %s", newSHASum, chunkMeta.ContentSHA)
-			}
+				zlog.Debug("chunk download finished",
+					zap.Int("chunk_index", n+1),
+					zap.Any("num_chunks", numChunks),
+					zap.Any("new_sha3_sum", newSHASum),
+				)
 
-			zlog.Debug("chunk download finished",
-				zap.Int("chunk_index", n+1),
-				zap.Any("num_chunks", numChunks),
-				zap.Any("new_sha3_sum", newSHASum),
-			)
-
-			return f.writeChunkToFile(int64(chunkMeta.Start), newData)
+				return f.writeChunkToFile(int64(chunkMeta.Start), newData)
+			})
 		})
 
 	}
