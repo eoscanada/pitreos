@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/dfuse-io/dstore"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
@@ -45,6 +46,135 @@ func SetupStorage(baseURL string) (Storage, error) {
 		return NewGSStorage(base)
 	}
 	return nil, fmt.Errorf("unsupported storage scheme %q", base.Scheme)
+}
+
+// DStoreStorage
+
+type DStoreStorage struct {
+	store   *dstore.Store
+	baseURL *url.URL
+	client  *storage.Client
+	context context.Context
+	timeout time.Duration
+}
+
+func NewDStoreStorage(baseURL string) (*DStoreStorage, error) {
+	store, err := dstore.NewSimpleStore(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DStoreStorage{
+		timeout: time.Minute * 30,
+		baseURL: baseURL,
+		client:  client,
+		context: ctx,
+	}, nil
+}
+
+func (s *DStoreStorage) SetTimeout(timeout time.Duration) {
+	s.timeout = timeout
+}
+
+func (s *DStoreStorage) ListBackups(limit int, offset int, prefix string) (out []string, err error) {
+	slashLocation := strings.TrimSuffix(s.indexPath(prefix), ".yaml.gz") // ex: /myapp/v1/indexes/2018-*
+	location := strings.TrimPrefix(slashLocation, "/")                   // GS does not want "/" in prefix filter
+
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
+	iter := s.client.Bucket(s.baseURL.Host).Objects(ctx, &storage.Query{Prefix: location})
+
+	var chronoOut []string
+	for {
+		objAttrs, err := iter.Next()
+		if err != nil {
+			if err == iterator.Done {
+				break
+			}
+			return nil, err
+		}
+
+		name := objAttrs.Name
+		if !strings.HasSuffix(name, ".yaml.gz") {
+			zlog.Warn("ignoring file with wrong suffix", zap.String("name", name))
+			break // ignore any non-yaml.gz file
+		}
+
+		chronoOut = append(chronoOut, objAttrs.Name)
+
+	}
+
+	for i := len(chronoOut) - offset - 1; i >= int(math.Max(0, float64(len(chronoOut)-offset-limit))); i-- {
+		out = append(out, strings.TrimSuffix(path.Base(chronoOut[i]), ".yaml.gz"))
+	}
+
+	return
+}
+
+func (s *DStoreStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) {
+	return s.getObject(s.indexPath(name))
+}
+
+func (s *DStoreStorage) indexPath(name string) string {
+	if name == "" {
+		return path.Join(s.baseURL.Path, "indexes")
+	}
+	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "indexes", fmt.Sprintf("%s.yaml.gz", name))
+}
+
+func (s *DStoreStorage) chunkPath(hash string) string {
+	return path.Join(strings.TrimLeft(s.baseURL.Path, "/"), "chunks", fmt.Sprintf("%s", hash))
+}
+
+func (s *DStoreStorage) WriteBackupIndex(name string, content []byte) (err error) {
+	return s.putObject(s.indexPath(name), content)
+}
+
+func (s *DStoreStorage) putObject(location string, content []byte) (err error) {
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
+	w := s.client.Bucket(s.baseURL.Host).Object(location).NewWriter(ctx)
+	defer w.Close()
+	w.ContentType = "application/octet-stream"
+	w.CacheControl = "public, max-age=86400"
+
+	f := bytes.NewReader(content)
+
+	gw := gzip.NewWriter(w)
+	defer gw.Close()
+	if _, err := io.Copy(gw, f); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *DStoreStorage) getObject(location string) (out io.ReadCloser, err error) {
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
+	r, err := s.client.Bucket(s.baseURL.Host).Object(location).NewReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewGZipReadCloser(r)
+}
+
+func (s *DStoreStorage) WriteChunk(hash string, content []byte) (err error) {
+	return s.putObject(s.chunkPath(hash), content)
+}
+
+func (s *DStoreStorage) OpenChunk(hash string) (out io.ReadCloser, err error) {
+	return s.getObject(s.chunkPath(hash))
+}
+
+func (s *DStoreStorage) ChunkExists(hash string) (bool, error) {
+	location := s.chunkPath(hash)
+	ctx, _ := context.WithTimeout(s.context, s.timeout)
+	_, err := s.client.Bucket(s.baseURL.Host).Object(location).Attrs(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 //
