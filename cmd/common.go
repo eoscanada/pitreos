@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"time"
 
@@ -19,7 +19,8 @@ func errorCheck(prefix string, err error) {
 }
 
 func getPITR(storageURL string) *pitreos.PITR {
-	storage, err := pitreos.SetupStorage(storageURL)
+	ctx := context.Background()
+	storage, err := pitreos.NewDStoreStorage(ctx, storageURL)
 	errorCheck("setting up storage", err)
 
 	log.Println("Using storage:", storageURL)
@@ -31,10 +32,7 @@ func getPITR(storageURL string) *pitreos.PITR {
 
 	if viper.GetBool("enable-caching") {
 		fmt.Println("Cache enabled")
-		cacheURL, err := url.Parse(viper.GetString("cache-dir"))
-		errorCheck("--cache-storage path invalid", err)
-
-		cacheStorage, _ := pitreos.NewFSStorage(cacheURL)
+		cacheStorage, _ := pitreos.NewDStoreStorage(ctx, viper.GetString("cache-dir"))
 		pitr.SetCacheStorage(cacheStorage)
 	}
 
