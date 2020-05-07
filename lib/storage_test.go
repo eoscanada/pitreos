@@ -3,6 +3,7 @@ package pitreos
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestDStoreStorage_WriteBackupIndex_OpenBackupIndex(t *testing.T) {
 
 	b := make([]byte, 8)
 	l, err := rc.Read(b)
-	require.NoError(t, err)
+	require.Error(t, io.EOF)
 	require.Equal(t, 3, l)
 	require.Equal(t, []byte{1, 2, 3, 0, 0, 0, 0, 0}, b)
 
@@ -74,7 +75,7 @@ func TestNewDStoreStorage_WriteChunk_ChunkExists_OpenChunk(t *testing.T) {
 	rc, err := storage.OpenChunk("hash.1")
 	b := make([]byte, 8)
 	l, err := rc.Read(b)
-	require.NoError(t, err)
+	require.Error(t, io.EOF)
 	require.Equal(t, 3, l)
 	require.Equal(t, []byte{1, 2, 3, 0, 0, 0, 0, 0}, b)
 }

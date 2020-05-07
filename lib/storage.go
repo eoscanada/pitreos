@@ -30,7 +30,8 @@ type DStoreStorage struct {
 }
 
 func NewDStoreStorage(ctx context.Context, baseURL string) (*DStoreStorage, error) {
-	store, err := dstore.NewSimpleStore(baseURL)
+	store, err := dstore.NewStore(baseURL, "", "gzip", true)
+
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,8 @@ func (s *DStoreStorage) SetTimeout(timeout time.Duration) {
 }
 
 func (s *DStoreStorage) ListBackups(limit int, prefix string) (out []string, err error) {
-	ctx, _ := context.WithTimeout(s.ctx, s.timeout)
+	ctx, cancel := context.WithTimeout(s.ctx, s.timeout)
+	defer cancel()
 	withoutExtension := strings.TrimSuffix(s.indexPath(prefix), ".yaml.gz")
 
 	backups, err := s.store.ListFiles(ctx, withoutExtension, "", limit)
