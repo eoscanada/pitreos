@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	pitreos "github.com/eoscanada/pitreos/lib"
+	"github.com/eoscanada/pitreos"
 	"github.com/spf13/viper"
 )
 

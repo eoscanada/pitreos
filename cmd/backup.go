@@ -3,7 +3,7 @@ package cmd
 import (
 	"encoding/json"
 
-	pitreos "github.com/eoscanada/pitreos/lib"
+	"github.com/eoscanada/pitreos"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
