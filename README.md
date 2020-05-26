@@ -1,4 +1,4 @@
-# pitreos: Point in Time Recovery Tool by EOS Canada
+# pitreos: Point in Time Recovery Tool by dfuse.io
 _Pronounced like "Patriots"_
 
 Backup and restore tool optimized for large sparse files and append-only files.

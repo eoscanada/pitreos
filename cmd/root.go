@@ -29,13 +29,14 @@ var (
 
 var RootCmd = &cobra.Command{
 	Use:   "pitreos",
-	Short: "Point-in-time Recovery Tool by EOS Canada",
-	Long: `Pitreos - Point-in-time Recovery Tool by EOS Canada
+	Short: "Point-in-time Recovery Tool by dfuse.io",
+	Long: `Pitreos - Point-in-time Recovery by dfuse.io
 
 Pitreos is a very fast backup and restore command based on chunks
 comparison, optimized for very large files, sparse files and append-only
 files like the ones that you get when running Nodeos.
-Supports local storage, Google Cloud Storage and local caching.`,
+Supports local storage, and several objects stores (GCP, AWS, AZ) in
+addition to local caching.`,
 }
 
 func Execute() {
