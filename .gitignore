@@ -17,6 +17,6 @@
 *.blob
 *.img
 *.yaml
-pitreos
+/pitreos
 
 ~*.swp
