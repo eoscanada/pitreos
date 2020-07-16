@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/eoscanada/pitreos"
@@ -42,6 +43,7 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 		errorCheck("unable to create include filter", err)
 
 		if !strings.Contains(args[0], "--") {
+			fmt.Println("Getting lastest backup from storage")
 			lastBackup, err := pitr.GetLatestBackup(backupName)
 			errorCheck("Getting last available backup", err)
 
@@ -52,8 +54,11 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 			backupName = lastBackup
 		}
 
+		fmt.Printf("Restoring backup %q to destination %q (filter %s)\n", backupName, destPath, filter)
 		err = pitr.RestoreFromBackup(destPath, backupName, filter)
 		errorCheck("restoring from backup", err)
+
+		fmt.Printf("Restoration of backup completed\n")
 	},
 }
 

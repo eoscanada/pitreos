@@ -2,15 +2,18 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"path"
 	"strings"
 
+	"github.com/dfuse-io/logging"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var (
@@ -62,16 +65,17 @@ func init() {
 	RootCmd.PersistentFlags().Int("threads", 24, "Number of threads for concurrent hashing and transfer")
 	RootCmd.PersistentFlags().Int("timeout", 300, "Timeout in seconds for each and every chunk transfer")
 
+	RootCmd.PersistentFlags().CountP("verbosity", "v", "Verbosity of output message log")
+
 	RootCmd.PersistentFlags().String("cache-dir", path.Join(home, ".pitreos", "cache"), "Cache directory")
 	RootCmd.PersistentFlags().BoolP("enable-caching", "c", false, "Keep/use a copy of every block file sent")
 	RootCmd.PersistentFlags().StringSliceP("appendonly-files", "a", []string{}, "Files treated as append-only (ex: blocks/blocks.log)")
 
-	for _, flag := range []string{"store", "chunk-size", "threads", "timeout", "cache-dir", "enable-caching", "appendonly-files"} {
+	for _, flag := range []string{"store", "chunk-size", "threads", "timeout", "cache-dir", "enable-caching", "appendonly-files", "verbosity"} {
 		if err := viper.BindPFlag(flag, RootCmd.PersistentFlags().Lookup(flag)); err != nil {
 			panic(err)
 		}
 	}
-
 }
 
 func initConfig() {
@@ -84,7 +88,7 @@ func initConfig() {
 
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Println("Couldn't find cwd:", err)
+		fmt.Printf("Couldn't find cwd: %s\n", err)
 		os.Exit(1)
 	}
 
@@ -96,9 +100,37 @@ func initConfig() {
 
 	viper.AddConfigPath(dir)
 	viper.AddConfigPath(path.Join(home))
+
+	// First usage of logger, so configure it
+	configureLogger()
+
 	if err := viper.ReadInConfig(); err != nil {
-		log.Println("Not using config file:", err)
+		zlog.Debug("Not using config file", zap.Error(err))
 		return
 	}
-	log.Printf("Getting configuration from file: %s\n", viper.ConfigFileUsed())
+
+	// Reconfigure since we read config file
+	configureLogger()
+
+	zlog.Info("Getting configuration from file %q", zap.String("config_file", viper.ConfigFileUsed()))
+}
+
+func configureLogger() {
+	if viper.GetInt("verbosity") >= 2 {
+		logging.Override(createLogger(zap.DebugLevel))
+	} else if viper.GetInt("verbosity") >= 1 {
+		logging.Override(createLogger(zap.InfoLevel))
+	}
+}
+
+func createLogger(level zapcore.Level) *zap.Logger {
+	config := zap.NewDevelopmentConfig()
+	config.Level = zap.NewAtomicLevelAt(level)
+
+	if terminal.IsTerminal(1) {
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	}
+
+	logger, _ := config.Build()
+	return logger
 }

@@ -72,3 +72,21 @@ func (f *IncludeThanExcludeFilter) Match(relativePath string) bool {
 
 	return true
 }
+
+func (f *IncludeThanExcludeFilter) String() string {
+	if f == nil || (f.includeFilter != nil && f.excludeFilter == nil) {
+		return "<No filtering>"
+	}
+
+	include := "'All'"
+	if f.includeFilter != nil {
+		include = f.includeFilter.String()
+	}
+
+	exclude := "'Nothing'"
+	if f.includeFilter != nil {
+		include = f.includeFilter.String()
+	}
+
+	return fmt.Sprintf("[Included %s, Excluded %s]", include, exclude)
+}

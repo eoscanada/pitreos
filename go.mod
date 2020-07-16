@@ -3,10 +3,10 @@ module github.com/eoscanada/pitreos
 go 1.14
 
 require (
-	cloud.google.com/go/storage v1.4.0
 	github.com/abourget/llerrgroup v0.0.0-20161118145731-75f536392d17
 	github.com/avast/retry-go v2.6.0+incompatible
 	github.com/dfuse-io/dstore v0.1.0
+	github.com/dfuse-io/logging v0.0.0-20200406213449-45fc25dc6a8d
 	github.com/dustin/go-humanize v1.0.0
 	github.com/frostschutz/go-fibmap v0.0.0-20160825162329-b32c231bfe6a
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
@@ -28,5 +28,4 @@ require (
 	go.uber.org/zap v1.14.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
 	golang.org/x/net v0.0.0-20190724013045-ca1201d0de80
-	google.golang.org/api v0.15.0
 )

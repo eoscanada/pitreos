@@ -9,13 +9,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"go.uber.org/zap"
-	"golang.org/x/crypto/sha3"
-
 	"github.com/abourget/llerrgroup"
 	"github.com/avast/retry-go"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/ghodss/yaml"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/sha3"
 )
 
 var counterLock sync.Mutex
@@ -242,17 +241,17 @@ func (p *PITR) downloadFileFromChunks(fm *FileIndex, localFolder string) error {
 func (p *PITR) downloadBackupIndex(name string) (out *BackupIndex, err error) {
 	y, err := p.storage.OpenBackupIndex(name)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("open index: %w", err)
 	}
 	defer y.Close()
 
 	cnt, err := ioutil.ReadAll(y)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("read index: %w", err)
 	}
 
 	if err = yaml.Unmarshal(cnt, &out); err != nil {
-		return nil, fmt.Errorf("yaml unmarshal: %s", err)
+		return nil, fmt.Errorf("unmarshal index: %w", err)
 	}
 
 	return

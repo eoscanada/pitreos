@@ -2,22 +2,24 @@ package pitreos
 
 import (
 	"fmt"
+	"math"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 func (p *PITR) GetLatestBackup(tag string) (string, error) {
-	list, err := p.storage.ListBackups(1, "")
+	list, err := p.storage.ListBackups(math.MaxInt32, "")
 	if err != nil {
 		return "", err
 	}
-	if len(list) == 0 {
-		return "", fmt.Errorf("no backup found")
-	}
 
-	for _, b := range list {
-		if strings.HasSuffix(b, tag) {
-			return b, nil
-
+	for i := len(list) - 1; i >= 0; i-- {
+		candidate := list[i]
+		zlog.Debug("Found candidate backup", zap.String("name", candidate))
+		if strings.HasSuffix(candidate, tag) {
+			zlog.Debug("Found matching backup", zap.String("name", candidate))
+			return candidate, nil
 		}
 	}
 

@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"errors"
-	"strings"
+	"fmt"
 
 	"github.com/eoscanada/pitreos"
 	"github.com/spf13/cobra"
@@ -35,18 +34,13 @@ The 'filter' argument is interpreted as a Golang Regexp (Perl compatible) when p
 		filter, err := pitreos.NewIncludeThanExcludeFilter(stringFilter, "")
 		errorCheck("unable to create include filter", err)
 
-		if !strings.Contains(backupName, "--") {
-			lastBackup, err := pitr.GetLatestBackup(backupName)
-			errorCheck("Getting last available backup", err)
-
-			if lastBackup == "" {
-				errorCheck("getting last backups", errors.New("last available backup found empty"))
-			}
-
-			backupName = lastBackup
+		fmt.Printf("Listing backup %q files (filter %s)\n", backupName, filter)
+		resolvedName := resolveBackupName(pitr, backupName)
+		if resolvedName != backupName {
+			fmt.Printf("Resolved backup name input to %q\n", resolvedName)
 		}
 
-		err = pitr.ListBackupFiles(backupName, filter)
+		err = pitr.ListBackupFiles(resolvedName, filter)
 		errorCheck("listing backup's files", err)
 	},
 }

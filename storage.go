@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dfuse-io/dstore"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
@@ -53,13 +54,21 @@ func (s *DStoreStorage) ListBackups(limit int, prefix string) (out []string, err
 	withoutExtension := strings.TrimSuffix(s.indexPath(prefix), ".yaml.gz")
 
 	backups, err := s.store.ListFiles(ctx, withoutExtension, "", limit)
-	for _, b := range backups {
-		out = append(out, strings.Trim(b, ".yaml.gz"))
+
+	out = make([]string, len(backups))
+	for i, b := range backups {
+		name := strings.TrimPrefix(strings.Trim(b, ".yaml.gz"), "indexes/")
+		zlog.Debug("Underlying store backup", zap.String("name", b), zap.String("original_name", b))
+
+		out[i] = name
 	}
 	return
 }
 
 func (s *DStoreStorage) OpenBackupIndex(name string) (out io.ReadCloser, err error) {
+	objectPath := s.indexPath(name)
+	zlog.Debug("Trying to open backup index", zap.String("name", name), zap.String("path", objectPath))
+
 	return s.store.OpenObject(s.ctx, s.indexPath(name))
 }
 
