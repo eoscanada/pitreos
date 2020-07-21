@@ -91,12 +91,17 @@ func (f *FileOps) hasDataInRange(startIndex, size int64) bool {
 	if f.extentsLoaded == false {
 		exts, err := f.getSparseFileExtents()
 		if err != nil {
-			zlog.Warn("sparse check, cannot optimize based on sparse file readout")
+			zlog.Warn("sparse check failed, cannot optimize based on sparse file holes, prepare for large backups")
+		} else {
+			f.extents = exts
 		}
-		f.extents = exts
 		f.extentsLoaded = true
 	}
 	f.lock.Unlock()
+
+	if f.extents == nil {
+		return true
+	}
 
 	for _, ex := range f.extents {
 		if uint64(startIndex) <= ex.Logical+ex.Length-1 && ex.Logical <= uint64(endIndex) {
