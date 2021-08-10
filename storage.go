@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dfuse-io/dstore"
+	"github.com/streamingfast/dstore"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )

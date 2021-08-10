@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added support for all `dstore` backends (https://github.com/dfuse-io/dstore), including Azure Blob Storage, AWS S3, GCP and local file storage.
+* Added support for all `dstore` backends (https://github.com/streamingfast/dstore), including Azure Blob Storage, AWS S3, GCP and local file storage.
 
 ### Changed
 
