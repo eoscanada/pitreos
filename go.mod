@@ -5,7 +5,6 @@ go 1.14
 require (
 	github.com/abourget/llerrgroup v0.0.0-20161118145731-75f536392d17
 	github.com/avast/retry-go v2.6.0+incompatible
-	github.com/dfuse-io/logging v0.0.0-20200406213449-45fc25dc6a8d
 	github.com/dustin/go-humanize v1.0.0
 	github.com/frostschutz/go-fibmap v0.0.0-20160825162329-b32c231bfe6a
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
@@ -23,7 +22,8 @@ require (
 	github.com/spf13/jwalterweatherman v0.0.0-20180814060501-14d3d4c51834 // indirect
 	github.com/spf13/pflag v1.0.3-0.20180821114517-d929dcbb1086 // indirect
 	github.com/spf13/viper v1.1.0
-	github.com/streamingfast/dstore v0.1.1-0.20210810110932-928f221474e4 // indirect
+	github.com/streamingfast/dstore v0.1.1-0.20210811180812-4db13e99cc22 // indirect
+	github.com/streamingfast/logging v0.0.0-20210811175431-f3b44b61606a // indirect
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/zap v1.14.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
